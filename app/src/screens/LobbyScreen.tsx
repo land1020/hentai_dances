@@ -303,7 +303,7 @@ export default function LobbyScreen({
     }
 
     const canStart = roomState.players.length >= 3 && roomState.players.length <= 8;
-    const npcCount = roomState.players.filter(p => p.isNpc).length;
+    const npcCount = roomState.players.filter((p: Player) => p.isNpc).length;
 
     return (
         <div className="min-h-screen p-4">

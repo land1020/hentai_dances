@@ -411,7 +411,6 @@ interface GamePlayScreenProps {
 
 export default function GamePlayScreen({
     isOnlineMode = false,
-    onlineRoomId,
     onlineUserId,
     initialGameState,
     onGameStateChange,
@@ -681,9 +680,14 @@ export default function GamePlayScreen({
     // 現在の自分のプレイヤー情報
     const myPlayer = useMemo(() => {
         if (!gameState) return null;
+
+        if (isOnlineMode && onlineUserId) {
+            return gameState.players.find(p => p.id === onlineUserId) || null;
+        }
+
         // ローカルモードでは最初の非NPCプレイヤーをコントロール
         return gameState.players.find(p => !p.isNpc) || gameState.players[0];
-    }, [gameState]);
+    }, [gameState, isOnlineMode, onlineUserId]);
 
     // 自分のターンかどうか
     const isMyTurn = useMemo(() => {
