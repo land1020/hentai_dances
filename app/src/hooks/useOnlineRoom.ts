@@ -31,6 +31,7 @@ interface UseOnlineRoomResult {
     updatePlayerName: (playerId: string, name: string) => Promise<void>;
     startGame: (gameState: GameState) => Promise<void>;
     syncGameState: (gameState: GameState) => Promise<void>;
+    enterRoom: (roomId: string, player: Player) => Promise<{ success: boolean; message?: string; isNewRoom?: boolean }>;
 }
 
 export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
@@ -144,6 +145,24 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         await updateGameState(roomId, gameState);
     }, [roomId]);
 
+    // 指定IDで部屋に参加または作成
+    const enterRoom = useCallback(async (targetRoomId: string, player: Player): Promise<{ success: boolean; message?: string; isNewRoom?: boolean }> => {
+        const exists = await roomExists(targetRoomId);
+
+        if (exists) {
+            // 参加
+            const success = await joinRoom(targetRoomId, player);
+            if (!success) {
+                return { success: false, message: 'ルームに参加できません（満員またはゲーム中）' };
+            }
+            return { success: true, isNewRoom: false };
+        } else {
+            // 作成
+            await createRoom(targetRoomId, player.id, player);
+            return { success: true, isNewRoom: true };
+        }
+    }, []);
+
     return {
         room,
         isLoading,
@@ -157,6 +176,7 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         updatePlayerName,
         startGame,
         syncGameState,
+        enterRoom,
     };
 }
 

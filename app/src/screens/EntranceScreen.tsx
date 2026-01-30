@@ -4,13 +4,12 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Trophy, RefreshCw, Wifi, WifiOff, Users, Plus } from 'lucide-react';
+import { Wrench, Trophy, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { loadRoomState, clearRoomState } from '../store/gameStore';
 import {
     createRoom,
     joinRoom,
-    roomExists,
-    generateRoomId
+    roomExists
 } from '../services/roomService';
 import { getOrCreateUserId, setPlayerName } from '../hooks/useOnlineRoom';
 import type { Player } from '../types';
@@ -34,8 +33,8 @@ export default function EntranceScreen() {
         }
     }, []);
 
-    // オンラインルーム作成
-    const handleCreateOnlineRoom = async () => {
+    // オンラインモード入室（作成または参加）（ローカルモードと同じ挙動）
+    const handleEnterOnlineRoom = async () => {
         if (!name.trim()) {
             setError('名前を入力してください');
             return;
@@ -44,63 +43,8 @@ export default function EntranceScreen() {
             setError('名前は10文字以内で入力してください');
             return;
         }
-
-        setIsLoading(true);
-        setError('');
-
-        try {
-            const userId = getOrCreateUserId();
-            setPlayerName(name.trim());
-
-            // ユニークなルームIDを生成
-            let newRoomId = generateRoomId();
-            let attempts = 0;
-            while (await roomExists(newRoomId) && attempts < 10) {
-                newRoomId = generateRoomId();
-                attempts++;
-            }
-
-            const hostPlayer: Player = {
-                id: userId,
-                name: name.trim(),
-                isNpc: false,
-                hand: [],
-                isAlive: true,
-                team: 'CITIZEN',
-                hentaiLevel: 0,
-                currentPrefix: null,
-                assignedWord: null,
-                isCursed: false,
-                cursedPrefix: null,
-                color: '#8B5CF6',
-            };
-
-            await createRoom(newRoomId, userId, hostPlayer);
-
-            localStorage.setItem('hentai_room_id', newRoomId);
-            localStorage.setItem('hentai_game_mode', 'online');
-
-            navigate(`/online-lobby/${newRoomId}`);
-        } catch (err) {
-            console.error('ルーム作成エラー:', err);
-            setError('ルームの作成に失敗しました。もう一度お試しください。');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // オンラインルーム参加
-    const handleJoinOnlineRoom = async () => {
-        if (!name.trim()) {
-            setError('名前を入力してください');
-            return;
-        }
-        if (name.length > 10) {
-            setError('名前は10文字以内で入力してください');
-            return;
-        }
-        if (!roomId.trim()) {
-            setError('ルームIDを入力してください');
+        if (!roomId.match(/^\d{4}$/)) {
+            setError('部屋番号は4桁の数字で入力してください');
             return;
         }
 
@@ -108,13 +52,6 @@ export default function EntranceScreen() {
         setError('');
 
         try {
-            const exists = await roomExists(roomId.toUpperCase());
-            if (!exists) {
-                setError('ルームが見つかりません');
-                setIsLoading(false);
-                return;
-            }
-
             const userId = getOrCreateUserId();
             setPlayerName(name.trim());
 
@@ -133,20 +70,30 @@ export default function EntranceScreen() {
                 color: '#8B5CF6',
             };
 
-            const success = await joinRoom(roomId.toUpperCase(), player);
-            if (!success) {
-                setError('ルームに参加できません（満員またはゲーム中）');
-                setIsLoading(false);
-                return;
+            // 存在確認
+            const exists = await roomExists(roomId);
+
+            if (exists) {
+                // 参加
+                const success = await joinRoom(roomId, player);
+                if (!success) {
+                    setError('ルームに参加できません（満員またはゲーム中）');
+                    setIsLoading(false);
+                    return;
+                }
+            } else {
+                // 作成
+                await createRoom(roomId, userId, player);
             }
 
-            localStorage.setItem('hentai_room_id', roomId.toUpperCase());
+            // オンラインフラグ保存
             localStorage.setItem('hentai_game_mode', 'online');
+            localStorage.setItem('hentai_room_id', roomId);
 
-            navigate(`/online-lobby/${roomId.toUpperCase()}`);
+            navigate(`/online-lobby/${roomId}`);
         } catch (err) {
-            console.error('ルーム参加エラー:', err);
-            setError('ルームへの参加に失敗しました。もう一度お試しください。');
+            console.error('オンライン入室エラー:', err);
+            setError('エラーが発生しました。もう一度お試しください。');
         } finally {
             setIsLoading(false);
         }
@@ -343,60 +290,46 @@ export default function EntranceScreen() {
                             />
                         </div>
 
-                        {/* ルーム作成ボタン */}
+                        {/* 部屋番号入力 (4桁) */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                部屋番号（4桁）
+                            </label>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                value={roomId}
+                                onChange={(e) => setRoomId(e.target.value)}
+                                placeholder="1234"
+                                maxLength={4}
+                                className="input-field text-center text-xl tracking-widest"
+                            />
+                        </div>
+
+                        {/* 参加/作成ボタン */}
                         <button
-                            onClick={handleCreateOnlineRoom}
-                            disabled={isLoading || !name.trim()}
+                            onClick={handleEnterOnlineRoom}
+                            disabled={isLoading}
                             className="btn-primary w-full py-4 flex items-center justify-center gap-2"
                         >
                             {isLoading ? (
                                 <RefreshCw className="w-5 h-5 animate-spin" />
                             ) : (
                                 <>
-                                    <Plus className="w-5 h-5" />
-                                    新しいルームを作成
+                                    <Trophy className="w-5 h-5" />
+                                    部屋に入る / 作る
                                 </>
                             )}
                         </button>
+                    </div>
 
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-white/20"></div>
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-gray-900 text-gray-400">または</span>
-                            </div>
-                        </div>
-
-                        {/* ルームID入力 */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
-                                ルームIDを入力して参加
-                            </label>
-                            <input
-                                type="text"
-                                value={roomId}
-                                onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-                                placeholder="ABCD12"
-                                maxLength={6}
-                                className="input-field text-center text-2xl tracking-widest"
-                            />
-                        </div>
-
-                        {/* ルーム参加ボタン */}
+                    {/* 下部リセットボタン等 */}
+                    <div className="pt-2">
                         <button
-                            onClick={handleJoinOnlineRoom}
-                            disabled={isLoading || !name.trim() || !roomId.trim()}
-                            className="btn-secondary w-full py-3 flex items-center justify-center gap-2"
+                            onClick={handleReset}
+                            className="w-full py-3 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-sm transition-colors border border-white/10"
                         >
-                            {isLoading ? (
-                                <RefreshCw className="w-5 h-5 animate-spin" />
-                            ) : (
-                                <>
-                                    <Users className="w-5 h-5" />
-                                    ルームに参加
-                                </>
-                            )}
+                            ルーム情報をリセット
                         </button>
                     </div>
                 </div>
