@@ -13,8 +13,12 @@ import {
     Eye,
     Play,
     AlertCircle,
-    X
+    X,
+    ArrowUp,
+    ArrowDown
 } from 'lucide-react';
+import HentaiGauge from '../components/HentaiGauge';
+import { CARD_DEFINITIONS, createCard } from '../data/cards';
 import type { GameState, Player, Card, CardType } from '../types';
 import { GamePhase } from '../types';
 import {
@@ -22,44 +26,206 @@ import {
     saveRoomState,
     type LocalRoomState
 } from '../store/gameStore';
-import { initializeGame, advancePhase, playCard, canPlayCard, selectTarget, getCulpritPlayer, selectCard } from '../engine/GameEngine';
-import { CARD_DEFINITIONS } from '../data/cards';
+import { initializeGame, advancePhase, playCard, canPlayCard, selectTarget, getCulpritPlayer, selectCard, submitExchangeCard, completeArrestAnimation, completeCulpritVictoryAnimation } from '../engine/GameEngine';
+import ArrestAnimationOverlay from '../components/ArrestAnimationOverlay';
+import CulpritVictoryAnimationOverlay from '../components/CulpritVictoryAnimationOverlay';
 
-// カードコンポーネント
+
+
+
+// カード詳細モーダル
+function CardDetailModal({
+    card,
+    isPlayable,
+    onClose,
+    onPlay
+}: {
+    card: Card;
+    isPlayable: boolean;
+    onClose: () => void;
+    onPlay: () => void;
+}) {
+    const definition = CARD_DEFINITIONS[card.type];
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={onClose}
+            />
+
+            <motion.div
+                initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.8, y: 20 }}
+                className="relative bg-gradient-to-br from-indigo-900 to-slate-900 p-6 rounded-2xl shadow-2xl border-2 border-white/20 max-w-sm w-full z-10"
+            >
+                {/* 閉じるボタン */}
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                >
+                    <X className="w-6 h-6" />
+                </button>
+
+                <div className="flex flex-col items-center gap-6">
+                    {/* カード画像エリア */}
+                    <div className={`
+                        w-48 h-64 rounded-xl shadow-2xl relative overflow-hidden
+                        bg-gradient-to-br from-purple-600 to-pink-600
+                        border-4 border-white/20
+                    `}>
+                        <div className="absolute inset-0 p-4 flex flex-col items-center">
+                            {/* カード名 */}
+                            {/* カード名 */}
+                            <div className={`
+                                font-bold text-center text-white drop-shadow-md mb-4 bg-black/20 px-4 py-1 rounded-full w-full
+                                ${card.assignedDangerWord && card.assignedDangerWord.length > 5 ? 'text-lg' : 'text-xl'}
+                            `}>
+                                {card.assignedDangerWord && (
+                                    <span className="text-yellow-400 mr-1 block sm:inline">
+                                        {card.assignedDangerWord}
+                                    </span>
+                                )}
+                                <span>{definition.name}</span>
+                            </div>
+
+                            {/* アイコン */}
+                            <div className="flex-1 flex items-center justify-center w-full">
+                                {definition.icon ? (
+                                    <img
+                                        src={definition.icon}
+                                        alt={definition.name}
+                                        className="w-32 h-32 object-contain drop-shadow-2xl"
+                                    />
+                                ) : (
+                                    <div className="text-6xl animate-bounce">🎴</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 説明文 */}
+                    <div className="text-center space-y-2 bg-white/5 p-4 rounded-xl w-full border border-white/10">
+                        <h3 className="text-lg font-bold text-yellow-400">効果</h3>
+                        <p className="text-sm leading-relaxed text-gray-200">
+                            {definition.description}
+                        </p>
+                    </div>
+
+                    {/* 交換履歴 */}
+                    {card.tradeHistory && (
+                        <div className="text-center space-y-1 bg-purple-500/10 p-3 rounded-xl w-full border border-purple-500/30">
+                            <h3 className="text-sm font-bold text-purple-400">交換履歴</h3>
+                            <p className="text-xs text-gray-300">
+                                {card.tradeHistory.fromName} と {card.tradeHistory.toName} は<br />取り引きを行った
+                            </p>
+                        </div>
+                    )}
+
+                    {/* アクションボタン */}
+                    {isPlayable ? (
+                        <button
+                            onClick={onPlay}
+                            className="w-full py-4 rounded-xl bg-gradient-to-r from-yellow-500 to-orange-500 font-bold text-lg shadow-lg hover:shadow-orange-500/50 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
+                        >
+                            <Play className="w-6 h-6 fill-white" />
+                            このカードを出す
+                        </button>
+                    ) : (
+                        <div className="text-gray-400 text-sm bg-black/20 px-4 py-2 rounded-full">
+                            現在は使用できません
+                        </div>
+                    )}
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
+// カードコンポーネント（アイコン対応・クリックで詳細表示）
+// カードコンポーネント（アイコン対応・クリックで詳細表示）
 function GameCard({
     card,
     isSelected,
     isPlayable,
     isRevealed = true,
-    onClick
+    size = 'normal',
+    onClick,
+    onDetailClick
 }: {
     card: Card;
     isSelected: boolean;
     isPlayable: boolean;
     isRevealed?: boolean;
+    size?: 'normal' | 'small';
     onClick?: () => void;
+    onDetailClick?: () => void;
 }) {
     const definition = CARD_DEFINITIONS[card.type];
 
+    // サイズ定義
+    const isSmall = size === 'small';
+    const containerClass = isSmall ? 'w-14 h-20' : 'w-20 h-28';
+    const titleClass = isSmall ? 'text-[8px] px-0.5' : 'text-[9px] px-0.5';
+    const iconMaxHeight = isSmall ? 'max-h-[40px]' : 'max-h-[60px]';
+
     return (
         <motion.div
-            onClick={isPlayable ? onClick : undefined}
+            onClick={onClick}
             className={`
-        relative w-20 h-28 rounded-lg cursor-pointer transition-all
+        relative ${containerClass} rounded-lg cursor-pointer transition-all overflow-hidden
         ${isRevealed
                     ? 'bg-gradient-to-br from-purple-600 to-pink-600'
                     : 'bg-gradient-to-br from-gray-700 to-gray-800'}
         ${isSelected ? 'ring-4 ring-yellow-400 scale-110 -translate-y-2' : ''}
-        ${!isPlayable ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-105'}
+        ${!isPlayable ? 'opacity-80 grayscale-[0.5]' : 'hover:scale-105 shadow-lg'}
+        border border-white/20
       `}
             whileHover={isPlayable ? { y: -5 } : {}}
             whileTap={isPlayable ? { scale: 0.95 } : {}}
+            layoutId={`card-${card.id}`}
         >
             {isRevealed ? (
-                <div className="p-2 h-full flex flex-col justify-between text-xs">
-                    <div className="font-bold text-center leading-tight">{definition.name}</div>
-                    <div className="text-[8px] text-white/70 text-center leading-tight line-clamp-3">
-                        {definition.description}
+                <div className="p-1 h-full flex flex-col items-center relative">
+                    {/* カード名 */}
+                    <div
+                        className={`font-bold ${titleClass} text-center w-full mb-1 bg-black/20 rounded-full text-white shadow-sm flex-shrink-0 whitespace-nowrap overflow-hidden hover:bg-black/40 transition-colors z-20`}
+                        onClick={(e) => {
+                            if (onDetailClick) {
+                                e.stopPropagation();
+                                onDetailClick();
+                            }
+                        }}
+                    >
+                        {card.assignedDangerWord ? (
+                            <span className={`text-yellow-300 ${card.assignedDangerWord.length > 5 ? 'text-[7px]' : ''}`}>
+                                {card.assignedDangerWord} {definition.name}
+                            </span>
+                        ) : (
+                            definition.name
+                        )}
+                    </div>
+
+                    {/* アイコンエリア */}
+                    <div className="flex-1 w-full flex items-center justify-center relative my-0.5">
+                        {definition.icon ? (
+                            <img
+                                src={definition.icon}
+                                alt={definition.name}
+                                className={`w-full h-full object-contain ${iconMaxHeight} drop-shadow-md`}
+                            />
+                        ) : (
+                            <div className={`${isSmall ? 'text-xl' : 'text-3xl'} opacity-50`}>🎴</div>
+                        )}
+                    </div>
+
+                    {/* 拡大アイコン（右下） */}
+                    <div className="absolute top-1 right-1 opacity-50">
+                        <Eye className="w-3 h-3" />
                     </div>
                 </div>
             ) : (
@@ -69,8 +235,8 @@ function GameCard({
             )}
 
             {!isPlayable && isRevealed && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
-                    <X className="w-8 h-8 text-red-400" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg pointer-events-none">
+                    {/* 色を少し暗くするだけで、詳細は見れるようにXは出さない */}
                 </div>
             )}
         </motion.div>
@@ -90,10 +256,10 @@ function PlayerMat({
     player: Player;
     isActive: boolean;
     isTargetable: boolean;
-    playedCards?: { type: CardType, turn: number }[];
+    playedCards?: { type: CardType, turn: number, id: string }[];
     onClick?: () => void;
     position: 'bottom' | 'left' | 'right' | 'top';
-    onCardClick?: (cardType: CardType) => void;
+    onCardClick?: (cardType: CardType, cardId?: string) => void;
 }) {
     // 位置に応じたクラス
     const containerClasses = {
@@ -128,15 +294,19 @@ function PlayerMat({
                 className="px-3 py-1.5 flex items-center justify-between text-white shadow-sm border-b border-white/20"
                 style={{ backgroundColor: player.color || '#6B7280' }}
             >
-                <div className="flex items-center gap-2 overflow-hidden">
-                    <div className="flex items-center gap-1 font-bold text-sm truncate flex-1">
-                        <span className="opacity-80 text-xs">性癖:</span>
-                        <span className="bg-black/20 px-1.5 py-0.5 rounded text-xs">
-                            「{player.currentPrefix || '???'}」
+                <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                    {/* 性癖 */}
+                    <div className="flex-shrink-0 max-w-[70%] flex">
+                        <span className="bg-black/20 px-1.5 py-0.5 rounded text-xs truncate block">
+                            {player.currentPrefix || '???'}
                         </span>
-                        <span className="truncate">{player.name}</span>
                     </div>
+                    {/* 名前 */}
+                    <span className="truncate font-bold text-sm flex-1">
+                        {player.name}
+                    </span>
                 </div>
+
 
                 <div className="flex items-center gap-1">
                     {player.isNpc ? <Bot className="w-3.5 h-3.5 opacity-70" /> : <User className="w-3.5 h-3.5 opacity-70" />}
@@ -152,35 +322,49 @@ function PlayerMat({
                     <span className="absolute top-1 left-2 text-[10px] text-white/20 font-bold pointer-events-none">
                         プレイエリア
                     </span>
+                    <div className="absolute top-1 right-2 scale-75 origin-right">
+                        <HentaiGauge level={player.hentaiLevel || 0} />
+                    </div>
 
                     <div className="flex gap-1 items-center justify-start pl-1">
                         <AnimatePresence>
                             {cards.length > 0 ? (
-                                cards.map((cardInfo, idx) => (
-                                    <motion.div
-                                        key={`played-${idx}-${cardInfo.type}-${cardInfo.turn}`}
-                                        initial={{ opacity: 0, scale: 0.5, x: 20 }}
-                                        animate={{ opacity: 1, scale: 1, x: 0 }}
-                                        exit={{ opacity: 0, scale: 0.5 }}
-                                        className="relative cursor-pointer hover:scale-105 transition-transform flex-shrink-0"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onCardClick && onCardClick(cardInfo.type);
-                                        }}
-                                    >
-                                        {/* カード本体 */}
-                                        <div className="w-14 h-20 rounded bg-gradient-to-br from-white to-gray-200 shadow-md p-1 flex items-center justify-center border border-gray-300">
-                                            <div className="text-[9px] font-bold text-gray-900 text-center leading-tight line-clamp-2">
-                                                {CARD_DEFINITIONS[cardInfo.type].name}
+                                cards.map((cardInfo, _idx) => {
+                                    // 表示用のダミーカードオブジェクト
+                                    const dummyCard: Card = {
+                                        id: cardInfo.id,
+                                        type: cardInfo.type,
+                                        name: CARD_DEFINITIONS[cardInfo.type].name,
+                                        description: CARD_DEFINITIONS[cardInfo.type].description,
+                                        icon: CARD_DEFINITIONS[cardInfo.type].icon,
+                                        targetType: CARD_DEFINITIONS[cardInfo.type].targetType,
+                                        sortOrder: 0
+                                    } as Card;
+
+                                    return (
+                                        <div
+                                            key={dummyCard.id}
+                                            className="relative"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onCardClick && onCardClick(cardInfo.type, cardInfo.id);
+                                            }}
+                                        >
+                                            <GameCard
+                                                card={dummyCard}
+                                                isSelected={false}
+                                                isPlayable={false}
+                                                isRevealed={true}
+                                                size="small"
+                                            // GameCard内部のonClickは使わず、親divで制御
+                                            />
+                                            {/* ターンバッジ */}
+                                            <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-gray-700 border-2 border-white flex items-center justify-center shadow-md z-10 pointer-events-none">
+                                                <span className="text-[10px] font-bold text-white">{cardInfo.turn}</span>
                                             </div>
                                         </div>
-
-                                        {/* ターンバッジ */}
-                                        <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-gray-700 border-2 border-white flex items-center justify-center shadow-md z-10">
-                                            <span className="text-[10px] font-bold text-white">{cardInfo.turn}</span>
-                                        </div>
-                                    </motion.div>
-                                ))
+                                    );
+                                })
                             ) : (
                                 <div className="w-full text-center text-white/10 text-xs">
                                     No Card
@@ -211,7 +395,7 @@ function PlayerMat({
                     {player.hand.length}枚
                 </div>
             </div>
-        </motion.div>
+        </motion.div >
     );
 }
 
@@ -225,7 +409,40 @@ export default function GamePlayScreen() {
     const [showCulpritInfo, setShowCulpritInfo] = useState(false);
     const [showWitnessInfo, setShowWitnessInfo] = useState<string | null>(null); // 目撃者で見た相手のID
     const [message, setMessage] = useState('');
-    const [lastPlayedCards, setLastPlayedCards] = useState<Record<string, { type: CardType, turn: number }[]>>({});
+
+
+    // プレイ履歴から各プレイヤーの直近のカードを取得
+    const lastPlayedCards = useMemo(() => {
+        if (!gameState || !gameState.playedLog) return {};
+
+        const history: Record<string, { type: CardType, turn: number, id: string }[]> = {};
+
+        // ログを時系列順に処理
+        gameState.playedLog.forEach(log => {
+            if (!history[log.playerId]) {
+                history[log.playerId] = [];
+            }
+            // 各プレイヤーごとの履歴に追加
+            history[log.playerId].push({ type: log.cardType, turn: log.turn, id: log.cardId });
+        });
+
+        // 各プレイヤーの履歴を最新の4件に制限
+        Object.keys(history).forEach(playerId => {
+            // 末尾（最新）から4件を取得
+            history[playerId] = history[playerId].slice(-4);
+        });
+
+        return history;
+    }, [gameState?.playedLog]);
+
+    // 手札の移動履歴（in/out）
+    const [transferHistory, setTransferHistory] = useState<{
+        in: { card: Card, fromPlayerId: string } | null;
+        out: { card: Card, toPlayerId: string } | null;
+    }>({ in: null, out: null });
+
+    // 詳細表示中のカード
+    const [detailedCardInfo, setDetailedCardInfo] = useState<{ card: Card, isPlayable: boolean } | null>(null);
 
 
 
@@ -293,6 +510,16 @@ export default function GamePlayScreen() {
         }
 
         if (gameState.phase === GamePhase.RESOLVING_EFFECT) {
+            // 逮捕/通報カード演出中は自動進行しない（演出コンポーネントが制御）
+            if (gameState.arrestAnimationInfo) {
+                return;
+            }
+
+            // 変態勝利演出中も自動進行しない
+            if (gameState.culpritVictoryAnimationInfo) {
+                return;
+            }
+
             // 効果解決後、次のターンへ
             const timer = setTimeout(() => {
                 setGameState(advancePhase(gameState));
@@ -327,12 +554,7 @@ export default function GamePlayScreen() {
                 const newState = playCard(gameState, activePlayer.id, randomCard.id);
                 setGameState(newState);
                 setMessage(`${activePlayer.name}が${CARD_DEFINITIONS[randomCard.type].name}を出しました！`);
-                // 提出カードを記録
-                setLastPlayedCards(prev => {
-                    const existingCards = prev[activePlayer.id] || [];
-                    const newCards = [...existingCards, { type: randomCard.type, turn: gameState.roundNumber }].slice(-4);
-                    return { ...prev, [activePlayer.id]: newCards };
-                });
+                setMessage(`${activePlayer.name}が${CARD_DEFINITIONS[randomCard.type].name}を出しました！`);
             }
         }, 1500);
 
@@ -402,23 +624,23 @@ export default function GamePlayScreen() {
     }, [gameState, myPlayer]);
 
     // カードをプレイ
-    const handlePlayCard = () => {
-        if (!gameState || !myPlayer || !selectedCardId) return;
+    const handlePlayCard = (cardToPlay?: Card) => {
+        if (!gameState || !myPlayer) return;
+
+        const targetCardId = cardToPlay ? cardToPlay.id : selectedCardId;
+        if (!targetCardId) return;
+
         if (gameState.phase !== GamePhase.WAITING_FOR_PLAY) return;
 
-        const card = myPlayer.hand.find(c => c.id === selectedCardId);
+        const card = myPlayer.hand.find(c => c.id === targetCardId);
         if (!card || !canPlayCard(gameState, myPlayer, card)) return;
 
-        const newState = playCard(gameState, myPlayer.id, selectedCardId);
+        const newState = playCard(gameState, myPlayer.id, targetCardId);
         setGameState(newState);
         setSelectedCardId(null);
         setMessage(`${CARD_DEFINITIONS[card.type].name}を出しました！`);
 
-        setLastPlayedCards(prev => {
-            const existingCards = prev[myPlayer.id] || [];
-            const newCards = [...existingCards, { type: card.type, turn: gameState.roundNumber }].slice(-4);
-            return { ...prev, [myPlayer.id]: newCards };
-        });
+        setMessage(`${CARD_DEFINITIONS[card.type].name}を出しました！`);
 
         // 少年カードの場合は変態を表示
         if (card.type === 'boy') {
@@ -433,6 +655,64 @@ export default function GamePlayScreen() {
         const newState = selectCard(gameState, cardId);
         setGameState(newState);
     };
+
+
+    // カード交換（情報操作）
+    const handleExchangeCard = (cardId: string) => {
+        if (!gameState || !myPlayer) return;
+        const newState = submitExchangeCard(gameState, myPlayer.id, cardId);
+        setGameState(newState);
+
+        // 交換が完了したかチェック（フェーズが進んだか）
+        if (newState.phase === GamePhase.RESOLVING_EFFECT) {
+            setMessage('カード交換が実行されました！');
+        } else {
+            setMessage('カードを選択しました。他のプレイヤーを待っています...');
+        }
+    };
+
+
+
+    // カード移動履歴の更新監視
+    useEffect(() => {
+        if (!gameState || !myPlayer || !gameState.lastExchangeInfo) return;
+
+        const { exchanges } = gameState.lastExchangeInfo;
+        let newIn = transferHistory.in;
+        let newOut = transferHistory.out;
+        let hasUpdate = false;
+
+        // 自分へのIN（受け取ったカード）
+        const inExchange = exchanges.find(e => e.toPlayerId === myPlayer.id);
+        if (inExchange) {
+            // カードIDから情報を復元（player.handにあるはずだが、描画タイミングによっては...
+            // ここでは簡易的にIDからタイプを復元してダミーカードを作成）
+            // ID形式: type-number (例: culprit-1)
+            const type = inExchange.cardId.split('-')[0] as CardType;
+            if (type && CARD_DEFINITIONS[type]) {
+                const card = createCard(type);
+                card.id = inExchange.cardId; // IDは維持
+                newIn = { card, fromPlayerId: inExchange.fromPlayerId };
+                hasUpdate = true;
+            }
+        }
+
+        // 自分からのOUT（渡した/取られたカード）
+        const outExchange = exchanges.find(e => e.fromPlayerId === myPlayer.id);
+        if (outExchange) {
+            const type = outExchange.cardId.split('-')[0] as CardType;
+            if (type && CARD_DEFINITIONS[type]) {
+                const card = createCard(type);
+                card.id = outExchange.cardId;
+                newOut = { card, toPlayerId: outExchange.toPlayerId };
+                hasUpdate = true;
+            }
+        }
+
+        if (hasUpdate) {
+            setTransferHistory({ in: newIn, out: newOut });
+        }
+    }, [gameState?.lastExchangeInfo]); // lastExchangeInfoが変わるたびにチェック
 
     // システムメッセージ検知
     useEffect(() => {
@@ -470,6 +750,34 @@ export default function GamePlayScreen() {
 
         const newState = selectTarget(gameState, targetId);
         setGameState(newState);
+    };
+
+    // プレイエリアのカードクリック時に詳細を表示
+    const handlePlayedCardClick = (cardType: CardType, cardId?: string) => {
+        const definition = CARD_DEFINITIONS[cardType];
+        let tradeHistory = undefined;
+
+        // cardIdがあれば、実際のTableCardsから詳細情報を検索（交換履歴などを取得）
+        if (cardId && gameState) {
+            const tableCard = gameState.tableCards.find(c => c.id === cardId);
+            if (tableCard && tableCard.tradeHistory) {
+                tradeHistory = tableCard.tradeHistory;
+            }
+        }
+
+        // 詳細表示用の一時カードオブジェクト
+        const tempCard: Card = {
+            id: cardId || `view-detail-${cardType}`,
+            type: cardType,
+            name: definition.name,
+            description: definition.description,
+            icon: definition.icon,
+            targetType: definition.targetType,
+            sortOrder: definition.sortOrder,
+            tradeHistory: tradeHistory
+        };
+
+        setDetailedCardInfo({ card: tempCard, isPlayable: false });
     };
 
     // リザルトへ
@@ -557,6 +865,7 @@ export default function GamePlayScreen() {
                                 playedCards={lastPlayedCards[p.id]}
                                 onClick={() => handleSelectTarget(p.id)}
                                 position='top'
+                                onCardClick={handlePlayedCardClick}
                             />
                         );
                     }
@@ -580,6 +889,7 @@ export default function GamePlayScreen() {
                                     playedCards={lastPlayedCards[p.id]}
                                     onClick={() => handleSelectTarget(p.id)}
                                     position='left'
+                                    onCardClick={handlePlayedCardClick}
                                 />
                             );
                         }
@@ -632,6 +942,7 @@ export default function GamePlayScreen() {
                                     playedCards={lastPlayedCards[p.id]}
                                     onClick={() => handleSelectTarget(p.id)}
                                     position='right'
+                                    onCardClick={handlePlayedCardClick}
                                 />
                             );
                         }
@@ -670,9 +981,8 @@ export default function GamePlayScreen() {
                         <div className="flex items-center gap-3 overflow-hidden w-full">
                             <User className="w-6 h-6 opacity-90" />
                             <div className="flex items-center gap-2 font-bold text-lg truncate flex-1">
-                                <span className="opacity-80 text-sm">性癖:</span>
                                 <span className="bg-black/20 px-3 py-0.5 rounded text-base">
-                                    「{myPlayer.currentPrefix || '???'}」
+                                    {myPlayer.currentPrefix || '???'}
                                 </span>
                                 <span className="truncate text-xl">{myPlayer.name}</span>
                             </div>
@@ -680,218 +990,320 @@ export default function GamePlayScreen() {
                     </div>
 
                     {/* ボディエリア */}
-                    <div className="p-4 flex flex-col gap-4 relative bg-black/10">
+                    <div className="p-4 flex gap-4 relative bg-black/10 items-stretch">
 
-                        {/* プレイエリア（自分の使用済カード - 最大4枚まで表示） - 上部配置 */}
-                        <div className="h-24 w-full bg-black/20 rounded-lg relative flex items-center p-2 border border-white/5 mx-auto overflow-x-auto">
-                            <span className="absolute top-1 left-2 text-[10px] text-white/40 font-bold pointer-events-none">
-                                プレイエリア
-                            </span>
-
-                            <div className="flex gap-2 items-center justify-start pl-1">
-                                <AnimatePresence>
-                                    {(lastPlayedCards[myPlayer.id] && lastPlayedCards[myPlayer.id].length > 0) ? (
-                                        lastPlayedCards[myPlayer.id].map((cardInfo, idx) => (
-                                            <motion.div
-                                                key={`my-played-${idx}-${cardInfo.type}-${cardInfo.turn}`}
-                                                initial={{ opacity: 0, scale: 0.5, x: 20 }}
-                                                animate={{ opacity: 1, scale: 1, x: 0 }}
-                                                exit={{ opacity: 0, scale: 0.5 }}
-                                                className="relative flex-shrink-0"
-                                            >
-                                                <div className="w-14 h-18 rounded bg-gradient-to-br from-white to-gray-200 shadow-xl p-1 flex items-center justify-center border border-gray-300">
-                                                    <div className="text-[9px] font-bold text-gray-900 text-center leading-tight">
-                                                        {CARD_DEFINITIONS[cardInfo.type].name}
-                                                    </div>
-                                                </div>
-                                                <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-gray-700 border-2 border-white flex items-center justify-center shadow-md z-10">
-                                                    <span className="text-[10px] font-bold text-white">{cardInfo.turn}</span>
-                                                </div>
-                                            </motion.div>
-                                        ))
+                        {/* [左カラム] 履歴エリア (OUT/IN) */}
+                        <div className="flex-shrink-0 bg-black/40 p-4 rounded-2xl border border-white/10 flex flex-col items-center justify-center gap-2">
+                            <div className="flex gap-4">
+                                {/* OUT */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <div
+                                        className="w-10 h-10 flex items-center justify-center rounded-full shadow-md border border-white/10 transition-colors"
+                                        style={{ backgroundColor: transferHistory.out ? (gameState.players.find(p => p.id === transferHistory.out!.toPlayerId)?.color || '#374151') : '#1f2937' }}
+                                    >
+                                        {transferHistory.out ? (
+                                            <ArrowUp className="w-6 h-6 text-white font-bold" />
+                                        ) : (
+                                            <div className="w-6 h-6 opacity-20" />
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">OUT</span>
+                                    {transferHistory.out ? (
+                                        <div className="relative group">
+                                            <GameCard
+                                                card={transferHistory.out.card}
+                                                isSelected={false}
+                                                isPlayable={false}
+                                                isRevealed={true}
+                                                size="small"
+                                                onClick={() => setDetailedCardInfo({ card: transferHistory.out!.card, isPlayable: false })}
+                                            />
+                                        </div>
                                     ) : (
-                                        <div className="w-full text-center text-white/20 text-sm font-bold">出したカードなし</div>
+                                        <div className="w-14 h-20 bg-white/5 rounded-lg border border-white/5 flex items-center justify-center">
+                                            <span className="text-2xl opacity-10">?</span>
+                                        </div>
                                     )}
-                                </AnimatePresence>
+                                </div>
+
+                                {/* Vertical Divider */}
+                                <div className="w-[1px] bg-white/10 h-32 self-center"></div>
+
+                                {/* IN */}
+                                <div className="flex flex-col items-center gap-2">
+                                    <div
+                                        className="w-10 h-10 flex items-center justify-center rounded-full shadow-md border border-white/10 transition-colors"
+                                        style={{ backgroundColor: transferHistory.in ? (gameState.players.find(p => p.id === transferHistory.in!.fromPlayerId)?.color || '#374151') : '#1f2937' }}
+                                    >
+                                        {transferHistory.in ? (
+                                            <ArrowDown className="w-6 h-6 text-white font-bold" />
+                                        ) : (
+                                            <div className="w-6 h-6 opacity-20" />
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">IN</span>
+                                    {transferHistory.in ? (
+                                        <div className="relative group">
+                                            <GameCard
+                                                card={transferHistory.in.card}
+                                                isSelected={false}
+                                                isPlayable={false}
+                                                isRevealed={true}
+                                                size="small"
+                                                onClick={() => setDetailedCardInfo({ card: transferHistory.in!.card, isPlayable: false })}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="w-14 h-20 bg-white/5 rounded-lg border border-white/5 flex items-center justify-center">
+                                            <span className="text-2xl opacity-10">?</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
-                        {/* 手札エリア - 下部配置 */}
-                        <div className="flex-1 bg-black/20 rounded-lg border border-white/5 relative min-h-[160px] flex flex-col justify-end pt-8">
-                            <div className="absolute top-2 left-2 flex items-center gap-2">
-                                <span className="text-xs text-white/40 font-bold">手札</span>
-                                <span className="text-xs bg-white/10 px-2 py-0.5 rounded text-white/80">{myPlayer.hand.length}枚</span>
-                            </div>
+                        {/* [右カラム] プレイエリア & 手札エリア */}
+                        <div className="flex-1 flex flex-col gap-3 min-w-0">
 
-                            <div className="flex justify-center -space-x-4 pb-4 overflow-visible px-4">
-                                <AnimatePresence>
-                                    {myPlayer.hand.map((card) => (
-                                        <GameCard
-                                            key={card.id}
-                                            card={card}
-                                            isSelected={selectedCardId === card.id}
-                                            isPlayable={isMyTurn && gameState.phase === GamePhase.WAITING_FOR_PLAY && canPlayCard(gameState, myPlayer, card)}
-                                            isRevealed={true}
-                                            onClick={() => {
-                                                if (selectedCardId === card.id) {
-                                                    setSelectedCardId(null);
-                                                } else {
-                                                    setSelectedCardId(card.id);
-                                                }
-                                            }}
-                                        />
-                                    ))}
-                                </AnimatePresence>
-                            </div>
+                            {/* プレイエリア（上部） */}
+                            <div className="h-32 w-full bg-black/20 rounded-lg relative flex items-center p-3 border border-white/5 overflow-x-auto">
+                                <span className="absolute top-1 left-2 text-[10px] text-white/40 font-bold pointer-events-none">
+                                    プレイエリア
+                                </span>
+                                <div className="absolute top-1 right-2 scale-75 origin-right">
+                                    <HentaiGauge level={myPlayer.hentaiLevel || 0} />
+                                </div>
 
-                            {/* アクションボタンエリア */}
-                            <div className="h-12 flex justify-center items-center absolute bottom-4 left-0 right-0 z-20 pointer-events-none">
-                                <div className="pointer-events-auto">
+                                <div className="flex gap-2 items-center justify-start pl-1 mt-2">
                                     <AnimatePresence>
-                                        {selectedCardId && isMyTurn && gameState.phase === GamePhase.WAITING_FOR_PLAY && (
-                                            <motion.button
-                                                initial={{ opacity: 0, y: 10 }}
-                                                animate={{ opacity: 1, y: 0 }}
-                                                exit={{ opacity: 0, y: 10 }}
-                                                onClick={handlePlayCard}
-                                                className="btn-primary w-full max-w-sm py-2 text-lg font-bold shadow-lg shadow-yellow-500/30 flex items-center justify-center gap-2"
-                                            >
-                                                <Play className="w-5 h-5 fill-current" />
-                                                カードを出す
-                                            </motion.button>
+                                        {(lastPlayedCards[myPlayer.id] && lastPlayedCards[myPlayer.id].length > 0) ? (
+                                            lastPlayedCards[myPlayer.id].map((cardInfo, _idx) => {
+                                                const dummyCard: Card = {
+                                                    id: cardInfo.id,
+                                                    type: cardInfo.type,
+                                                    name: CARD_DEFINITIONS[cardInfo.type].name,
+                                                    description: CARD_DEFINITIONS[cardInfo.type].description,
+                                                    icon: CARD_DEFINITIONS[cardInfo.type].icon,
+                                                    targetType: CARD_DEFINITIONS[cardInfo.type].targetType,
+                                                    sortOrder: 0
+                                                } as Card;
+
+                                                return (
+                                                    <div
+                                                        key={dummyCard.id}
+                                                        className="relative flex-shrink-0"
+                                                    >
+                                                        <GameCard
+                                                            card={dummyCard}
+                                                            isSelected={false}
+                                                            isPlayable={false}
+                                                            isRevealed={true}
+                                                            size="small"
+                                                            onClick={() => handlePlayedCardClick(cardInfo.type, cardInfo.id)}
+                                                        />
+                                                        <div className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-gray-700 border-2 border-white flex items-center justify-center shadow-md z-10 pointer-events-none">
+                                                            <span className="text-[10px] font-bold text-white">{cardInfo.turn}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <div className="w-full text-left pl-2 text-white/20 text-lg font-bold">出したカードなし</div>
                                         )}
                                     </AnimatePresence>
                                 </div>
                             </div>
+
+                            {/* 手札エリア（下部） */}
+                            <div className="flex-1 bg-black/20 rounded-lg border border-white/5 relative p-2 flex flex-col justify-center items-center h-[140px]"> {/* 高さを明示的に確保 */}
+
+                                <div className="flex justify-center -space-x-4 hover:space-x-1 transition-all duration-300 overflow-visible px-4 w-full">
+                                    <AnimatePresence>
+                                        {myPlayer.hand.map((card, index) => {
+                                            const canPlay = isMyTurn && gameState.phase === GamePhase.WAITING_FOR_PLAY && canPlayCard(gameState, myPlayer, card);
+                                            return (
+                                                <motion.div
+                                                    key={card.id}
+                                                    initial={{ y: 50, opacity: 0 }}
+                                                    animate={{ y: 0, opacity: 1 }}
+                                                    transition={{ delay: index * 0.05 }}
+                                                    style={{ zIndex: index }}
+                                                >
+                                                    <GameCard
+                                                        card={card}
+                                                        isSelected={selectedCardId === card.id}
+                                                        isPlayable={canPlay}
+                                                        isRevealed={true}
+                                                        onClick={() => {
+                                                            if (canPlay) {
+                                                                if (selectedCardId === card.id) {
+                                                                    handlePlayCard(card);
+                                                                } else {
+                                                                    setSelectedCardId(card.id);
+                                                                }
+                                                            } else {
+                                                                setDetailedCardInfo({ card, isPlayable: canPlay });
+                                                            }
+                                                        }}
+                                                        onDetailClick={() => setDetailedCardInfo({ card, isPlayable: canPlay })}
+                                                    />
+                                                </motion.div>
+                                            );
+                                        })}
+                                    </AnimatePresence>
+                                </div>
+
+                                {/* アクションボタンエリア */}
+                                <div className="h-12 flex justify-center items-center absolute bottom-2 left-0 right-0 z-20 pointer-events-none">
+                                    <div className="pointer-events-auto">
+                                        <AnimatePresence>
+                                            {selectedCardId && isMyTurn && gameState.phase === GamePhase.WAITING_FOR_PLAY && (
+                                                <motion.button
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: 10 }}
+                                                    onClick={() => handlePlayCard()}
+                                                    className="btn-primary w-full max-w-sm py-2 text-lg font-bold shadow-lg shadow-yellow-500/30 flex items-center justify-center gap-2"
+                                                >
+                                                    <Play className="w-5 h-5 fill-current" />
+                                                    カードを出す
+                                                </motion.button>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                </div>
+                                {/* 手札枚数バッジ (右下) */}
+                                <div className="absolute bottom-2 right-2 bg-black/60 px-2 py-1 rounded text-xs text-white/70 border border-white/10 font-bold pointer-events-none">
+                                    {myPlayer.hand.length}枚
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </motion.div>
-            </div>
+
+
+                </motion.div >
+            </div >
 
 
 
             {/* 対象選択ガイド（画面上部に固定表示、クリックスルー可能） */}
             <AnimatePresence>
-                {isSelectingTarget && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
-                    >
-                        <div className="bg-purple-900/90 border-2 border-purple-500 rounded-2xl px-8 py-4 shadow-2xl text-center backdrop-blur-sm">
-                            <div className="flex items-center gap-3">
-                                <AlertCircle className="w-8 h-8 text-purple-400" />
-                                <div>
-                                    <h3 className="text-xl font-bold text-white">対象を選択してください</h3>
-                                    <p className="text-sm text-purple-300">
-                                        {gameState.pendingAction?.cardType === 'detective' && '変態だと思うプレイヤーをタップ'}
-                                        {gameState.pendingAction?.cardType === 'witness' && '手札を見たいプレイヤーをタップ'}
-                                        {gameState.pendingAction?.cardType === 'dog' && '調査するプレイヤーをタップ'}
-                                        {gameState.pendingAction?.cardType === 'trade' && 'カードを交換するプレイヤーをタップ'}
-                                    </p>
+                {
+                    isSelectingTarget && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+                        >
+                            <div className="bg-purple-900/90 border-2 border-purple-500 rounded-2xl px-8 py-4 shadow-2xl text-center backdrop-blur-sm">
+                                <div className="flex items-center gap-3">
+                                    <AlertCircle className="w-8 h-8 text-purple-400" />
+                                    <div>
+                                        <h3 className="text-xl font-bold text-white">対象を選択してください</h3>
+                                        <p className="text-sm text-purple-300">
+                                            {gameState.pendingAction?.cardType === 'detective' && '変態だと思うプレイヤーをタップ'}
+                                            {gameState.pendingAction?.cardType === 'witness' && '手札を見たいプレイヤーをタップ'}
+                                            {gameState.pendingAction?.cardType === 'dog' && '調査するプレイヤーをタップ'}
+                                            {gameState.pendingAction?.cardType === 'trade' && 'カードを交換するプレイヤーをタップ'}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* モーダル類（オーバーレイ）- 対象選択モードは除外 */}
-            <div className="absolute inset-0 pointer-events-none z-50">
-                {
-                    (showCulpritInfo || showWitnessInfo || gameState.phase === GamePhase.GAME_OVER) && (
-                        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center p-4">
-                            {/* 背景暗転 */}
-                            <motion.div
-                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
-                            />
-
-                            {/* コンテンツ */}
-                            <div className="relative z-10 w-full max-w-lg pointer-events-auto">
-                                {/* ゲームオーバー */}
-                                {gameState.phase === GamePhase.GAME_OVER && (
-                                    <div className="text-center">
-                                        <h2 className={`text-6xl font-black mb-8 drop-shadow-[0_0_20px_rgba(0,0,0,0.8)] ${gameState.winner === 'CRIMINAL_TEAM' ? 'text-purple-500' : 'text-blue-500'
-                                            }`}>
-                                            {gameState.winner === 'CRIMINAL_TEAM' ? '変態の勝利' : '逮捕成功！'}
-                                        </h2>
-                                        <button onClick={handleGoToResult} className="btn-primary text-xl px-12 py-4">
-                                            結果画面へ
-                                        </button>
-                                    </div>
-                                )}
-
-                                {/* 少年カード情報 */}
-                                {showCulpritInfo && culpritPlayer && (
-                                    <motion.div
-                                        initial={{ scale: 0.9, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        className="bg-gray-900 border-2 border-red-500 rounded-2xl p-6 shadow-2xl text-center"
-                                    >
-                                        <Eye className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                                        <h3 className="text-xl font-bold text-red-400 mb-2">目撃情報！</h3>
-                                        <p className="text-gray-300 mb-6">変態はこの人です...</p>
-                                        <div className="text-4xl font-black text-white mb-8">{culpritPlayer.name}</div>
-                                        <button onClick={() => setShowCulpritInfo(false)} className="btn-secondary w-full">閉じる</button>
-                                    </motion.div>
-                                )}
-
-                                {/* 目撃者カード情報 */}
-                                {showWitnessInfo && ((witnessTarget = gameState.players.find(p => p.id === showWitnessInfo)) => witnessTarget && (
-                                    <motion.div
-                                        initial={{ scale: 0.9, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        className="bg-gray-900 border-2 border-purple-500 rounded-2xl p-6 shadow-2xl"
-                                    >
-                                        <div className="text-center mb-6">
-                                            <Eye className="w-10 h-10 text-purple-500 mx-auto mb-2" />
-                                            <h3 className="text-xl font-bold">{witnessTarget.name}の手札</h3>
-                                        </div>
-                                        <div className="flex flex-wrap justify-center gap-2 mb-6">
-                                            {witnessTarget.hand.map(card => (
-                                                <div key={card.id} className="w-20 h-28 bg-gradient-to-br from-purple-600 to-pink-600 rounded-lg p-2 flex items-center justify-center text-center text-xs font-bold shadow-md">
-                                                    {CARD_DEFINITIONS[card.type].name}
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <button onClick={() => setShowWitnessInfo(null)} className="btn-secondary w-full">閉じる</button>
-                                    </motion.div>
-                                ))()}
-                            </div>
-                        </div>
+                        </motion.div>
                     )
                 }
+            </AnimatePresence >
+
+            {/* モーダル類（オーバーレイ）- 対象選択モードは除外 */}
+            {/* モーダル類（オーバーレイ） */}
+            <div className="absolute inset-0 pointer-events-none z-50">
+                {(showCulpritInfo || showWitnessInfo || gameState.phase === GamePhase.GAME_OVER) && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        />
+                        <div className="relative z-10 w-full max-w-lg">
+                            {/* ゲームオーバー */}
+                            {gameState.phase === GamePhase.GAME_OVER && (
+                                <div className="text-center">
+                                    <h2 className={`text-6xl font-black mb-8 drop-shadow-[0_0_20px_rgba(0,0,0,0.8)] ${gameState.winner === 'CRIMINAL_TEAM' ? 'text-purple-500' : 'text-blue-500'}`}>
+                                        {gameState.winner === 'CRIMINAL_TEAM' ? '変態の勝利' : '逮捕成功！'}
+                                    </h2>
+                                    <button onClick={handleGoToResult} className="btn-primary text-xl px-12 py-4">
+                                        結果画面へ
+                                    </button>
+                                </div>
+                            )}
+                            {/* 少年カード情報 */}
+                            {showCulpritInfo && culpritPlayer && (
+                                <motion.div
+                                    initial={{ scale: 0.9, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className="bg-gray-900 border-2 border-red-500 rounded-2xl p-6 shadow-2xl text-center"
+                                >
+                                    <Eye className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                                    <h3 className="text-xl font-bold text-red-400 mb-2">目撃情報！</h3>
+                                    <p className="text-gray-300 mb-6">変態はこの人です...</p>
+                                    <div className="text-4xl font-black text-white mb-8">{culpritPlayer.name}</div>
+                                    <button onClick={() => setShowCulpritInfo(false)} className="btn-secondary w-full">閉じる</button>
+                                </motion.div>
+                            )}
+                            {/* 目撃者カード情報 */}
+                            {showWitnessInfo && ((witnessTarget = gameState.players.find(p => p.id === showWitnessInfo)) => witnessTarget && (
+                                <motion.div
+                                    initial={{ scale: 0.9, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className="bg-gray-900 border-2 border-purple-500 rounded-2xl p-6 shadow-2xl"
+                                >
+                                    <div className="text-center mb-6">
+                                        <Eye className="w-10 h-10 text-purple-500 mx-auto mb-2" />
+                                        <h3 className="text-xl font-bold">{witnessTarget.name}の手札</h3>
+                                    </div>
+                                    <div className="flex flex-wrap justify-center gap-2 mb-6">
+                                        {witnessTarget.hand.map(card => (
+                                            <GameCard
+                                                key={card.id}
+                                                card={card}
+                                                isSelected={false}
+                                                isPlayable={false}
+                                                isRevealed={true}
+                                                onClick={() => setDetailedCardInfo({ card, isPlayable: false })}
+                                            />
+                                        ))}
+                                    </div>
+                                    <button onClick={() => setShowWitnessInfo(null)} className="btn-secondary w-full">閉じる</button>
+                                </motion.div>
+                            ))()}
+                        </div>
+                    </div>
+                )}
 
                 {/* カード選択モーダル（正常者用） */}
                 {gameState.phase === GamePhase.SELECTING_CARD && gameState.pendingAction?.targetIds && (
                     function () {
                         const activePlayer = gameState.players[gameState.activePlayerIndex];
                         if (!myPlayer || activePlayer.id !== myPlayer.id) return null;
-
                         const targetId = gameState.pendingAction!.targetIds![0];
                         const targetPlayer = gameState.players.find(p => p.id === targetId);
-
                         if (!targetPlayer) return null;
-
                         return (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
                                 <motion.div
                                     initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                                    className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-auto"
+                                    className="absolute inset-0 bg-black/80 backdrop-blur-sm"
                                 />
                                 <motion.div
                                     initial={{ scale: 0.9, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
-                                    className="relative z-10 bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 shadow-2xl w-full max-w-2xl pointer-events-auto"
+                                    className="relative z-10 bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 shadow-2xl w-full max-w-2xl"
                                 >
                                     <div className="text-center mb-6">
                                         <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-2" />
                                         <h3 className="text-xl font-bold text-white">カードを選択してください</h3>
                                         <p className="text-gray-400">変態だと思うカードをタップ！</p>
                                     </div>
-
                                     <div className="flex flex-wrap justify-center gap-4 mb-6">
                                         {targetPlayer.hand.map((card, index) => (
                                             <motion.div
@@ -920,9 +1332,191 @@ export default function GamePlayScreen() {
             </div>
 
 
+
+            {/* カード情報エリア（ターゲット選択時など） */}
+
+            {
+                gameState.phase === GamePhase.EXCHANGE_PHASE && gameState.exchangeState?.type === 'INFORMATION' && (
+                    (function () {
+                        const hasSelected = gameState.exchangeState.selections[myPlayer.id];
+                        const alivePlayers = gameState.players.filter(p => p.isAlive);
+                        // 選択済みの人数カウント
+                        const selectedCount = alivePlayers.filter(p => gameState.exchangeState!.selections[p.id]).length;
+                        const totalAlive = alivePlayers.length;
+
+                        if (!hasSelected) {
+                            return (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                    <motion.div
+                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                        className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-auto"
+                                    />
+                                    <motion.div
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        className="relative z-10 bg-gray-900 border-2 border-cyan-500 rounded-2xl p-6 shadow-2xl w-full max-w-2xl pointer-events-auto text-center"
+                                    >
+                                        <div className="mb-6">
+                                            <div className="inline-block bg-cyan-500/20 px-3 py-1 rounded-full text-cyan-300 font-bold mb-2">
+                                                情報操作
+                                            </div>
+                                            <h3 className="text-xl font-bold text-white">左隣に渡すカードを選択してください</h3>
+                                            <p className="text-gray-400 text-sm mt-1">選択状況: {selectedCount}/{totalAlive}</p>
+                                        </div>
+
+                                        <div className="flex flex-wrap justify-center gap-4 mb-2">
+                                            {myPlayer.hand.map((card) => (
+                                                <div key={card.id} className="relative group">
+                                                    <GameCard
+                                                        card={card}
+                                                        isSelected={false}
+                                                        isPlayable={true}
+                                                        onClick={() => handleExchangeCard(card.id)}
+                                                    />
+                                                    <div className="absolute inset-0 bg-cyan-500/0 group-hover:bg-cyan-500/10 rounded-lg transition-colors pointer-events-none" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+                                </div>
+                            );
+                        } else {
+                            // 選択完了・待機中ステータス
+                            return (
+                                <motion.div
+                                    initial={{ y: -50, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="fixed top-24 left-1/2 -translate-x-1/2 z-40 bg-black/80 backdrop-blur text-white px-6 py-3 rounded-full border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.5)] flex items-center gap-3"
+                                >
+                                    <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+                                    <span className="font-bold">
+                                        情報操作: 全員の選択を待っています ({selectedCount}/{totalAlive})
+                                    </span>
+                                </motion.div>
+                            );
+                        }
+                    })()
+                )
+            }
+
+            {/* TRADE交換 UI */}
+            {gameState.phase === GamePhase.EXCHANGE_PHASE && gameState.exchangeState?.type === 'TRADE' && (
+                (function () {
+                    const targetIds = gameState.exchangeState.targetIds || [];
+                    const isTarget = targetIds.includes(myPlayer.id);
+                    const hasSelected = gameState.exchangeState.selections[myPlayer.id];
+
+                    if (!isTarget) {
+                        return (
+                            <motion.div
+                                initial={{ y: -50, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                className="fixed top-24 left-1/2 -translate-x-1/2 z-40 bg-black/80 backdrop-blur text-white px-6 py-3 rounded-full border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.5)] flex items-center gap-3"
+                            >
+                                <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                                <span className="font-bold">
+                                    取り引き中...
+                                </span>
+                            </motion.div>
+                        );
+                    }
+
+                    if (!hasSelected) {
+                        if (myPlayer.hand.length === 0) return null;
+                        return (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                                <motion.div
+                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                    className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-auto"
+                                />
+                                <motion.div
+                                    initial={{ scale: 0.9, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    className="relative z-10 bg-gray-900 border-2 border-purple-500 rounded-2xl p-6 shadow-2xl w-full max-w-2xl text-center pointer-events-auto"
+                                >
+                                    <div className="mb-6">
+                                        <div className="inline-block bg-purple-500/20 px-3 py-1 rounded-full text-purple-300 font-bold mb-2">
+                                            取り引き
+                                        </div>
+                                        <h3 className="text-xl font-bold text-white">相手に渡すカードを選択してください</h3>
+                                    </div>
+
+                                    <div className="flex flex-wrap justify-center gap-4 mb-2">
+                                        {myPlayer.hand.map((card) => (
+                                            <div key={card.id} className="relative group">
+                                                <GameCard
+                                                    card={card}
+                                                    isSelected={false}
+                                                    isPlayable={true}
+                                                    onClick={() => handleExchangeCard(card.id)}
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            </div>
+                        );
+                    } else {
+                        return (
+                            <motion.div
+                                initial={{ y: -50, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                className="fixed top-24 left-1/2 -translate-x-1/2 z-40 bg-black/80 backdrop-blur text-white px-6 py-3 rounded-full border border-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.5)] flex items-center gap-3"
+                            >
+                                <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                                <span className="font-bold">
+                                    取り引き: 相手の選択を待っています
+                                </span>
+                            </motion.div>
+                        );
+                    }
+                })()
+            )}
+
+            {/* 詳細表示モーダル */}
+            <AnimatePresence>
+                {
+                    detailedCardInfo && (
+                        <CardDetailModal
+                            card={detailedCardInfo.card}
+                            isPlayable={detailedCardInfo.isPlayable}
+                            onClose={() => setDetailedCardInfo(null)}
+                            onPlay={() => {
+                                const { card } = detailedCardInfo;
+                                setDetailedCardInfo(null);
+
+                                // ターゲット選択の有無に関わらず、即座にプレイ
+                                handlePlayCard(card);
+                            }}
+                        />
+                    )
+                }
+            </AnimatePresence >
+
+            {/* 逮捕/通報カード演出オーバーレイ */}
+            <ArrestAnimationOverlay
+                animationInfo={gameState.arrestAnimationInfo}
+                players={gameState.players}
+                onComplete={() => {
+                    // 演出終了後、勝敗判定を実行
+                    const newState = completeArrestAnimation(gameState);
+                    setGameState(newState);
+                }}
+            />
+
+            {/* 変態勝利演出オーバーレイ */}
+            <CulpritVictoryAnimationOverlay
+                animationInfo={gameState.culpritVictoryAnimationInfo}
+                players={gameState.players}
+                onComplete={() => {
+                    // 演出終了後、勝利を確定
+                    const newState = completeCulpritVictoryAnimation(gameState);
+                    setGameState(newState);
+                }}
+            />
+
         </div >
     );
 }
 
 // カード交換アニメーション
-

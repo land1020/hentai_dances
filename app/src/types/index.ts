@@ -30,8 +30,15 @@ export interface Card {
     name: string;         // 表示名
     description: string;  // 効果の説明文
     imagePath?: string;   // 画像パス
+    icon?: string;        // アイコン画像パス
     targetType: TargetType;
     sortOrder: number;    // ソート順（表示順序）
+    assignedDangerWord?: string; // 変態カードに割り当てられた危険ワード
+    tradeHistory?: {
+        type: 'TRADE' | 'INFORMATION' | 'RUMOR';
+        fromName: string;
+        toName: string;
+    };
 }
 
 // プレイヤー情報
@@ -44,25 +51,29 @@ export interface Player {
     team: 'CITIZEN' | 'CRIMINAL'; // 所属チーム
     avatarUrl?: string;  // アバター画像URL
 
-    // 枕詞（二つ名）システム
-    currentPrefix: string | null;  // 現在の枕詞
-    isCursed: boolean;             // 呪われているか
-    cursedPrefix: string | null;   // 固定化された危険ワード
+    // 枕詞（二つ名）＆変態度システム
+    hentaiLevel: number;           // 変態度レベル (0-4)
+    currentPrefix: string | null;  // 現在の枕詞（全体）
+    assignedWord: string | null;   // 割り当てられた単語（単体）
+    isCursed: boolean;             // (Legacy) 呪われているか
+    cursedPrefix: string | null;   // (Legacy) 固定化された危険ワード
     color: string;                 // プレイヤーカラー
 }
 
 // ゲームフェーズ
-export enum GamePhase {
-    SETUP = 'SETUP',                     // ゲーム開始前・配布
-    TURN_START = 'TURN_START',           // ターン開始処理
-    WAITING_FOR_PLAY = 'WAITING_FOR_PLAY', // カード提出待ち
-    SELECTING_TARGET = 'SELECTING_TARGET', // カード効果の対象選択中
-    SELECTING_CARD = 'SELECTING_CARD',     // カード選択中（正常者用）
-    RESOLVING_EFFECT = 'RESOLVING_EFFECT', // 効果処理中
-    EXCHANGE_PHASE = 'EXCHANGE_PHASE',   // カード交換中
-    TURN_END = 'TURN_END',               // ターン終了処理
-    GAME_OVER = 'GAME_OVER',             // 決着
-}
+export const GamePhase = {
+    SETUP: 'SETUP',                     // ゲーム開始前・配布
+    TURN_START: 'TURN_START',           // ターン開始処理
+    WAITING_FOR_PLAY: 'WAITING_FOR_PLAY', // カード提出待ち
+    SELECTING_TARGET: 'SELECTING_TARGET', // カード効果の対象選択中
+    SELECTING_CARD: 'SELECTING_CARD',     // カード選択中（正常者用）
+    RESOLVING_EFFECT: 'RESOLVING_EFFECT', // 効果処理中
+    EXCHANGE_PHASE: 'EXCHANGE_PHASE',   // カード交換中
+    TURN_END: 'TURN_END',               // ターン終了処理
+    GAME_OVER: 'GAME_OVER',             // 決着
+} as const;
+
+export type GamePhase = typeof GamePhase[keyof typeof GamePhase];
 
 // ルーム状態
 export type RoomStatus = 'WAITING' | 'PLAYING' | 'FINISHED';
@@ -86,6 +97,13 @@ export interface PlayerResult {
     isMVP: boolean;                    // メイン勝者（変態/警察/正常者）か
     isAccompliceWinner: boolean;       // 異常性癖者として勝利したか
     usedPlotCard: boolean;             // 異常性癖者カードを使用したか
+
+    // 変態度変動
+    oldHentaiLevel?: number;
+    newHentaiLevel?: number;
+    newDisplayName?: string;
+    newPrefix?: string;                // 次のゲームで使用する二つ名
+    newAssignedWord?: string;          // 次のゲームで使用する割り当てワード
 }
 
 // 勝利詳細情報
@@ -118,6 +136,11 @@ export interface GameState {
     pendingAction: PendingAction | null;
     dangerWord: string | null;  // 今回の危険ワード（変態カード用）
     systemMessage?: string | null; // システム通知メッセージ
+    exchangeState?: {
+        type: 'INFORMATION' | 'RUMOR' | 'TRADE';
+        selections: Record<string, string>; // playerId -> cardId
+        targetIds?: string[]; // 交換対象のプレイヤーIDリスト（TRADE用）
+    } | null;
     lastExchangeInfo?: {
         type: 'RUMOR' | 'INFORMATION' | 'TRADE';
         exchanges: {
@@ -126,6 +149,33 @@ export interface GameState {
             cardId: string; // 移動したカードID（所有者の判定用）
         }[];
     } | null;
+    playedLog: PlayLog[]; // カードプレイ履歴
+    arrestAnimationInfo?: ArrestAnimationInfo | null; // 逮捕/通報カード演出情報
+    culpritVictoryAnimationInfo?: CulpritVictoryAnimationInfo | null; // 変態勝利演出情報
+}
+
+// 逮捕/通報カード演出情報
+export interface ArrestAnimationInfo {
+    cardType: 'detective' | 'dog'; // どのカードで発動したか
+    sourcePlayerId: string; // カードを使用したプレイヤー
+    targetPlayerId: string; // 対象プレイヤー
+    selectedCardId?: string; // 選択されたカードID（dogの場合）
+    selectedCardType?: CardType; // 選択されたカードのタイプ
+    isSuccess: boolean; // 変態を当てたかどうか
+}
+
+// 変態勝利演出情報
+export interface CulpritVictoryAnimationInfo {
+    culpritPlayerId: string; // 変態プレイヤーID
+    dangerWord?: string; // 危険ワード
+}
+
+// プレイ履歴
+export interface PlayLog {
+    cardId: string;
+    cardType: CardType;
+    playerId: string;
+    turn: number; // roundNumber
 }
 
 // ルームデータ（Firestore）
@@ -154,6 +204,8 @@ export interface GameResult {
     players: {
         id: string;
         name: string;
+        prefix: string;  // 二つ名
+        hentaiLevel: number;  // 変態度
         score: number;
         team: 'CITIZEN' | 'CRIMINAL';
         isWinner: boolean;

@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wrench, Trophy, RefreshCw } from 'lucide-react';
+import { loadRoomState, clearRoomState } from '../store/gameStore';
 
 export default function EntranceScreen() {
     const navigate = useNavigate();
@@ -62,12 +63,32 @@ export default function EntranceScreen() {
 
     // ルーム情報リセット
     const handleReset = () => {
-        localStorage.removeItem('hentai_room_id');
-        localStorage.removeItem('hentai_user_id');
-        localStorage.removeItem('hentai_debug_mode');
-        setRoomId('');
-        setIsDebugMode(true);
-        window.location.reload();
+        // バリデーション
+        if (!roomId.match(/^\d{4}$/)) {
+            setError('リセットしたい部屋番号（4桁）を入力欄に入力してください');
+            return;
+        }
+
+        if (!window.confirm(`部屋番号 ${roomId} のデータを本当にリセットしますか？\nこの操作は取り消せません。`)) {
+            return;
+        }
+
+        const savedState = loadRoomState();
+
+        if (savedState && savedState.roomId === roomId) {
+            // 保存データと入力された部屋番号が一致する場合のみ削除
+            clearRoomState();
+            localStorage.removeItem('hentai_room_id');
+            // 名前やユーザーIDは利便性のため残すが、完全に初期化したいなら消しても良い
+
+            alert(`部屋番号 ${roomId} の情報をリセットしました。`);
+            setRoomId('');
+            window.location.reload();
+        } else if (!savedState) {
+            setError('保存されているルーム情報はありません。');
+        } else {
+            setError(`入力された部屋番号と保存データの部屋番号が一致しません。\n(保存されている部屋: ${savedState.roomId})`);
+        }
     };
 
     // 殿堂入りページへ

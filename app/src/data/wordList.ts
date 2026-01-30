@@ -2,98 +2,59 @@
 // 枕詞（二つ名）ワードリスト: 変態は踊る
 // ====================================
 
-// 通常の枕詞リスト
-export const NORMAL_WORDS: string[] = [
-    // ポジティブ系
-    '駆け出しの',
-    '噂の',
-    '期待の',
-    '話題の',
-    '伝説の',
-    '最強の',
-    '無敵の',
-    '孤高の',
-    '誇り高き',
-    '高貴な',
-    '美しき',
-    '優雅な',
-    '魅惑の',
-    '華麗な',
-    '気高き',
-
-    // 中立～コミカル系
-    '腹ペコの',
-    '眠れる',
-    '泣き虫の',
-    '怒りん坊の',
-    '甘えん坊の',
-    '夢見る',
-    'うっかり',
-    'そそっかしい',
-    'のんびり屋の',
-    '天然系の',
-    '不思議な',
-    'ささやかな',
-    'ちょっとした',
-    '紳士的な',
-    '淑女風の',
-    'ミステリアスな',
-    '秘密主義の',
-    '正義感あふれる',
-    'クールな',
-    'ホットな',
-    '情熱の',
-    '青春の',
-    '憧れの',
-    '仮面の',
-    '真面目な',
-    'おちゃめな',
-    '天才的な',
-    '奇跡の',
-    '運命の',
-    '約束された',
+// レベル1: 通常 (Normal)
+export const NormalWords: string[] = [
+    '尿意を我慢している', '便秘気味な', '首輪を付けた', 'ぶっぱなす', '濡れてる',
+    '早すぎる', '硬すぎる', '太すぎる', '敏感な', '生がいい', '踏んでくれ',
+    '高笑いの', '無表情の', 'イケメンの', 'ぶっとももな', '団地妻',
+    'ムッチムチ', '四つん這いの', '誘い受けの', '男の娘', 'ぽこち～ん',
+    '贅沢な名だねぇ', '興奮気味の', '何かに目覚めた', '肉食系の', '飢えた', '荒ぶる'
 ];
 
-// 危険ワードリスト（変態敗北時に付与される）
-export const DANGER_WORDS: string[] = [
-    // 犯罪・追放系
-    '指名手配の',
-    '獄中の',
-    '追放された',
-    '裏切りの',
-    '堕落した',
-    '闇堕ちした',
-    '呪われた',
-    '忌まわしき',
-    '禁断の',
-    '破滅の',
-
-    // 変態・異常系
-    '変態的な',
-    '異常性癖の',
-    '露出狂の',
-    '痴漢常習犯の',
-    '覗き魔の',
-    '下着泥棒の',
-
-    // ダメ人間系
-    '失墜した',
-    '没落した',
-    '転落人生の',
-    '社会的に終わった',
-    '詰んでる',
-    'オワコンの',
-    '黒歴史持ちの',
-    '前科持ちの',
-
-    // コミカル系
-    'ド変態の',
-    '救いようのない',
-    '末期の',
-    '重症の',
-    '手遅れの',
-    '筋金入りの',
+// レベル2: 異常 (Abnormal) - ちょっと怪しい、または変な
+export const AbnormalWords: string[] = [
+    'バカ', '肉便器の', '寝取られの', '乳首責めの', 'ショタちんこな',
+    '童貞の', 'フル勃起の', 'パイズリ大好き', '立ちバック好きな', 'おパンティを被った',
+    'ど変態の', 'パパ活の', 'ポコチンティヌス・', '隠し撮り常習犯', '露出狂の',
+    '手コキのプロ', '名器の', 'パイパンの', '即ハメの', '騎乗位大好き',
+    '駅弁が得意な', '尻を振れ', 'お尻好きの', 'ほらイクぞ', '跪け',
+    '豚野郎', 'ザコちんぽの', 'アヘ顔の', '絶頂中の', '陥没乳首の',
+    '援助交際の', '仮性包茎の', 'オフパコ希望の', '飛べねぇ豚はただの',
+    'ゴムは絶対付けない', 'バイアグラ常中'
 ];
+
+// レベル3: 危険 (Danger) - 明らかに変態・犯罪的
+export const DangerWords: string[] = [
+    '変態', '露出狂', '指名手配の', '伝説の（悪い意味で）', '下着泥棒の',
+    '覗き魔の', '痴漢常習犯の', '獄中の', '追放された', '裏切りの',
+    '堕落した', '闇堕ちした', '呪われた', '忌まわしき', '禁断の',
+    '破滅の', '変態的な', '異常性癖の', 'ド変態の', '救いようのない',
+    '末期の', '重症の', '手遅れの', '筋金入りの', 'パンツを被った',
+    '全裸の', '社会的に終わった'
+];
+
+// レベル4: 装飾 (Decoration) - レベル3の言葉につく接頭語
+export const DecorationWords: string[] = [
+    'キング・オブ・', 'アルティメット', '真・', 'スーパー', 'ハイパー',
+    '絶対王者', '終身名誉', 'ワールドクラスの', '銀河級の', '神聖なる',
+    '暗黒の', '覚醒した', '極上の', '1000年に1人の', '選ばれし'
+];
+
+// 後方互換性用エイリアス（既存コードが壊れないように）
+export const NORMAL_WORDS = NormalWords;
+export const DANGER_WORDS = DangerWords;
+
+/**
+ * ワードリストをシャッフル
+ */
+export function shuffleWords(words: string[]): string[] {
+    const shuffled = [...words];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
 
 /**
  * 通常ワードからランダムに1つ取得（重複なしでpop）
@@ -106,18 +67,19 @@ export function popNormalWord(shuffledWords: string[]): string | null {
  * 危険ワードからランダムに1つ取得
  */
 export function getRandomDangerWord(): string {
-    const index = Math.floor(Math.random() * DANGER_WORDS.length);
-    return DANGER_WORDS[index];
+    const index = Math.floor(Math.random() * DangerWords.length);
+    return DangerWords[index];
 }
 
 /**
- * ワードリストをシャッフル
+ * レベルに応じたワードリストを取得
  */
-export function shuffleWords(words: string[]): string[] {
-    const shuffled = [...words];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+export function getWordListByLevel(level: number): string[] {
+    switch (level) {
+        case 1: return NormalWords;
+        case 2: return AbnormalWords;
+        case 3: return DangerWords;
+        case 4: return DecorationWords; // レベル4は特殊処理だがリストとしてはこれを返す
+        default: return [];
     }
-    return shuffled;
 }

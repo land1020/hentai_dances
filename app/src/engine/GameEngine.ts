@@ -2,10 +2,11 @@
 // ゲームエンジン: 変態は踊る
 // ====================================
 
-import type { GameState, Player, Card, WinnerTeam, VictoryType, VictoryInfo, PlayerResult } from '../types';
+import type { GameState, Player, Card, WinnerTeam, VictoryType, VictoryInfo, PlayerResult, ArrestAnimationInfo } from '../types';
 import { GamePhase } from '../types';
 import { generateDeck, dealCards, findFirstDiscovererIndex } from '../utils/deckFactory';
-import { getRandomDangerWord, shuffleWords, NORMAL_WORDS, popNormalWord } from '../data/wordList';
+import { getRandomDangerWord } from '../data/wordList';
+import { calculateHentaiLevel, generateDisplayName } from '../hooks/useHentaiSystem';
 
 /**
  * ゲームを初期化する
@@ -15,32 +16,64 @@ export function initializeGame(
 ): GameState {
     const playerCount = players.length;
 
+    // プレイヤーの並び順をランダムにシャッフル
+    const shuffledPlayers = [...players];
+    for (let i = shuffledPlayers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledPlayers[i], shuffledPlayers[j]] = [shuffledPlayers[j], shuffledPlayers[i]];
+    }
+    console.log('[Init] Player order shuffled:', shuffledPlayers.map(p => p.name).join(' -> '));
+
     // デッキを生成してシャッフル（参加人数に応じて自動生成）
     const deck = generateDeck(playerCount);
 
     // カードを配布
     const hands = dealCards(deck, playerCount);
 
-    // 枕詞を割り当て
+    // 枕詞を割り当て（ゲーム全体の危険ワード）
     const dangerWord = getRandomDangerWord();
-    const shuffledNormalWords = shuffleWords([...NORMAL_WORDS]);
 
-    // プレイヤーに手札と枕詞を設定
-    const updatedPlayers = players.map((player, index) => {
-        let prefix = player.currentPrefix;
+    // 変態カードに個別の危険ワードを割り当て
+    hands.forEach(hand => {
+        const culpritCard = hand.find(c => c.type === 'culprit');
+        if (culpritCard) {
+            culpritCard.assignedDangerWord = getRandomDangerWord();
+        }
+    });
 
-        // 呪われていなければ新しい枕詞を割り当て
-        if (!player.isCursed) {
-            prefix = popNormalWord(shuffledNormalWords) || '謎の';
+    // プレイヤーに手札と枕詞を設定（シャッフルされた順番で）
+    const updatedPlayers = shuffledPlayers.map((player, index) => {
+        const level = player.hentaiLevel || 0;
+
+        // 既にcurrentPrefixが設定されている場合（前のゲームから引き継いだ場合）はそれを使用
+        // 設定されていない場合のみ新しく生成
+        let finalPrefix = player.currentPrefix;
+        let finalAssignedWord = player.assignedWord;
+
+        if (!finalPrefix) {
+            console.log(`[Init] Generating name for ${player.name} (Lv${level})`);
+
+            const { assignedWord: newAssignedWord, fullPrefix: newFullPrefix } = generateDisplayName(
+                level,
+                player.name,
+                player.assignedWord || null
+            );
+
+            finalPrefix = newFullPrefix || '常識人な';
+            finalAssignedWord = newAssignedWord;
+
+            console.log(`[Init] -> Prefix: ${finalPrefix}, Assigned: ${finalAssignedWord}`);
         } else {
-            // 呪われている場合は危険ワードをそのまま使用
-            prefix = player.cursedPrefix;
+            console.log(`[Init] Using existing prefix for ${player.name}: ${finalPrefix}`);
         }
 
         return {
             ...player,
+            name: player.name,
             hand: hands[index],
-            currentPrefix: prefix,
+            currentPrefix: finalPrefix,
+            assignedWord: finalAssignedWord,
+            hentaiLevel: level,
             isAlive: true,
             team: 'CITIZEN' as const,
         };
@@ -53,12 +86,13 @@ export function initializeGame(
         phase: GamePhase.SETUP,
         players: updatedPlayers,
         activePlayerIndex: firstPlayerIndex,
-        turnCount: 0,       // 総プレイ回数（カードを出すたびに+1）。初期値は0。
-        roundNumber: 1,     // 1巡目からスタート
+        turnCount: 0,
+        roundNumber: 1,
         tableCards: [],
         winner: null,
         victoryInfo: null,
         pendingAction: null,
+        playedLog: [],
         dangerWord,
     };
 }
@@ -67,12 +101,18 @@ export function initializeGame(
  * ゲームフェーズを次に進める
  */
 export function advancePhase(state: GameState): GameState {
+    // フェーズが進む際はシステムメッセージをクリアする
+    const stateWithClearedMessage = {
+        ...state,
+        systemMessage: undefined
+    };
+
     switch (state.phase) {
         case GamePhase.SETUP:
-            return { ...state, phase: GamePhase.TURN_START };
+            return { ...stateWithClearedMessage, phase: GamePhase.TURN_START };
 
         case GamePhase.TURN_START:
-            return { ...state, phase: GamePhase.WAITING_FOR_PLAY, turnCount: state.turnCount + 1 };
+            return { ...stateWithClearedMessage, phase: GamePhase.WAITING_FOR_PLAY, turnCount: state.turnCount + 1 };
 
         case GamePhase.WAITING_FOR_PLAY:
             return state; // カードプレイ待ち（playCardで遷移）
@@ -81,13 +121,13 @@ export function advancePhase(state: GameState): GameState {
             return state; // 対象選択待ち（selectTargetで遷移）
 
         case GamePhase.RESOLVING_EFFECT:
-            return { ...state, phase: GamePhase.TURN_END };
+            return { ...stateWithClearedMessage, phase: GamePhase.TURN_END };
 
         case GamePhase.EXCHANGE_PHASE:
-            return { ...state, phase: GamePhase.TURN_END };
+            return { ...stateWithClearedMessage, phase: GamePhase.TURN_END };
 
         case GamePhase.TURN_END:
-            return moveToNextPlayer(state);
+            return moveToNextPlayer(stateWithClearedMessage);
 
         case GamePhase.GAME_OVER:
             return state;
@@ -160,6 +200,15 @@ export function playCard(state: GameState, playerId: string, cardId: string): Ga
         ...state,
         players: newPlayers,
         tableCards: [...state.tableCards, card],
+        playedLog: [
+            ...state.playedLog,
+            {
+                cardId: card.id,
+                cardType: card.type,
+                playerId: player.id,
+                turn: state.roundNumber
+            }
+        ],
         turnCount: state.turnCount + 1, // プレイ回数を+1
     };
 
@@ -189,15 +238,21 @@ export function canPlayCard(state: GameState, player: Player, card: Card): boole
         return false;
     }
 
-    // 逮捕カードは1巡目は出せない（2巡目以降で使用可能）
+    // 逮捕カードは通常1巡目は出せない（2巡目以降で使用可能）
+    // ただし、手札が「逮捕」と「変態」のみで構成されている（他に出せるカードがない）場合は、特例として1巡目でもプレイ可能（この場合効果は発動しない）
     if (card.type === 'detective') {
         const playerCount = state.players.length;
-        // 現在のラウンドを動的に計算: (場に出ているカード枚数 / 人数) + 1
-        // 注意: 自分がこれから出すカードは含まれていないので、純粋に「今何巡目か」を判定
         const currentRound = Math.floor(state.tableCards.length / playerCount) + 1;
 
         if (currentRound < 2) {
-            return false;
+            // 他に出せるカードがあるかチェック
+            // 変態以外のカードがあれば、そちらを優先しなければならない
+            const hasOtherPlayableCard = player.hand.some(c => c.type !== 'detective' && c.type !== 'culprit');
+
+            if (hasOtherPlayableCard) {
+                return false;
+            }
+            // 他に出せるカードがない場合は true (許可)
         }
     }
 
@@ -214,19 +269,38 @@ function processCardEffect(state: GameState, playerIndex: number, card: Card): G
     switch (card.type) {
         case 'first_discoverer':
             // 効果なし、ログのみ
-            return { ...state, phase: GamePhase.RESOLVING_EFFECT };
+            // 変態発見時の演出: 変態カードのDangerWordsを表示
+            let dangerMessage = '変態の気配を感じます...';
+            // 全プレイヤーの手札から変態カードを探す
+            const culpritPlayer = state.players.find(p => p.hand.some(c => c.type === 'culprit'));
+            if (culpritPlayer) {
+                const culpritCard = culpritPlayer.hand.find(c => c.type === 'culprit');
+                if (culpritCard && culpritCard.assignedDangerWord) {
+                    dangerMessage = `「${culpritCard.assignedDangerWord}」変態を見てしまいました・・・`;
+                }
+            }
+
+            return {
+                ...state,
+                phase: GamePhase.RESOLVING_EFFECT,
+                systemMessage: dangerMessage
+            };
 
         case 'culprit':
             // 変態を出した = 勝利判定
             if (player.hand.length === 0) {
-                // 最後の1枚として出した = 変態の勝利
-                return declareWinner(
-                    state,
-                    'CRIMINAL_TEAM',
-                    'CULPRIT_ESCAPE',
-                    player.id,  // MVP: 変態カードを出したプレイヤー
-                    null
-                );
+                // 最後の1枚として出した = 変態の勝利 → 演出フェーズへ
+                // 変態カードの危険ワードを取得
+                const dangerWord = card.assignedDangerWord || state.dangerWord || undefined;
+
+                return {
+                    ...state,
+                    phase: GamePhase.RESOLVING_EFFECT,
+                    culpritVictoryAnimationInfo: {
+                        culpritPlayerId: player.id,
+                        dangerWord: dangerWord
+                    }
+                };
             } else {
                 // それ以外で出した = 変態の敗北（このチェックは通常canPlayCardで弾かれる）
                 return declareWinner(
@@ -238,7 +312,26 @@ function processCardEffect(state: GameState, playerIndex: number, card: Card): G
                 );
             }
 
-        case 'detective':
+        case 'detective': {
+            // 1巡目の場合は効果を発動せず、ただの捨て札として扱う
+            // （playCard関数内で既にカードが場に出されているため、-1して計算）
+            const playerCount = state.players.length;
+            const currentRound = Math.floor((state.tableCards.length - 1) / playerCount) + 1;
+            if (currentRound < 2) {
+                return { ...state, phase: GamePhase.RESOLVING_EFFECT };
+            }
+            // 2巡目以降は対象選択が必要
+            return {
+                ...state,
+                phase: GamePhase.SELECTING_TARGET,
+                pendingAction: {
+                    type: 'SELECT_TARGET',
+                    playerId: player.id,
+                    cardType: card.type,
+                },
+            };
+        }
+
         case 'witness':
         case 'dog':
         case 'trade':
@@ -269,8 +362,37 @@ function processCardEffect(state: GameState, playerIndex: number, card: Card): G
             return { ...state, phase: GamePhase.RESOLVING_EFFECT };
 
         case 'information':
-            // 情報操作: 全員が左隣の人に手札を1枚渡す（自動実行）
-            return executeInformationExchange(state);
+            // 情報操作: 全員が左隣の人に手札を1枚渡す
+            // NPCの選択を事前に決定
+            const npcSelections: Record<string, string> = {};
+            state.players.forEach(p => {
+                if (p.isNpc && p.isAlive && p.hand.length > 0) {
+                    const randomCard = p.hand[Math.floor(Math.random() * p.hand.length)];
+                    npcSelections[p.id] = randomCard.id;
+                }
+            });
+
+            const exchangeState = {
+                type: 'INFORMATION' as const,
+                selections: npcSelections
+            };
+
+            const infoState = {
+                ...state,
+                phase: GamePhase.EXCHANGE_PHASE,
+                exchangeState
+            };
+
+            // 全員選択完了済みかチェック（手札0枚のプレイヤーがいる場合や、全員NPCの場合など）
+            const isAllReady = infoState.players.every(p =>
+                !p.isAlive || p.hand.length === 0 || !!npcSelections[p.id]
+            );
+
+            if (isAllReady) {
+                return executeInformationExchange(infoState);
+            }
+
+            return infoState;
 
         case 'rumor':
             // うわさ: 全員が右隣の人の手札から1枚引く（自動実行）
@@ -304,20 +426,32 @@ export function selectTarget(state: GameState, targetPlayerId: string): GameStat
             // 警察: 変態を持っているか判定
             const hasCulprit = targetPlayer.hand.some(c => c.type === 'culprit');
             const hasAlibi = targetPlayer.hand.some(c => c.type === 'alibi');
+            const sourcePlayer = state.players[sourcePlayerIndex];
+
+            // 演出情報を作成
+            const detectiveAnimationInfo: ArrestAnimationInfo = {
+                cardType: 'detective',
+                sourcePlayerId: sourcePlayer.id,
+                targetPlayerId: targetPlayerId,
+                isSuccess: hasCulprit && !hasAlibi
+            };
 
             if (hasCulprit && !hasAlibi) {
-                // 変態を当てた！
-                const sourcePlayer = state.players[sourcePlayerIndex];
-                return declareWinner(
-                    state,
-                    'DETECTIVE_TEAM',
-                    'DETECTIVE',
-                    sourcePlayer.id,  // MVP: 警察カードを使用したプレイヤー
-                    targetPlayerId    // 対象: 変態カードを持っていたプレイヤー
-                );
+                // 変態を当てた！ → 演出フェーズへ
+                return {
+                    ...state,
+                    phase: GamePhase.RESOLVING_EFFECT,
+                    pendingAction: null,
+                    arrestAnimationInfo: detectiveAnimationInfo
+                };
             } else {
-                // 外れ
-                return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null };
+                // 外れ → 演出フェーズへ
+                return {
+                    ...state,
+                    phase: GamePhase.RESOLVING_EFFECT,
+                    pendingAction: null,
+                    arrestAnimationInfo: detectiveAnimationInfo
+                };
             }
 
         case 'witness':
@@ -344,8 +478,56 @@ export function selectTarget(state: GameState, targetPlayerId: string): GameStat
             };
 
         case 'trade':
-            // 取り引き: カード交換を自動実行
-            return executeTradeExchange(state, state.pendingAction.playerId, targetPlayerId);
+            // 取り引き: カード交換選択フェーズへ移行
+            {
+                const initiatorId = state.pendingAction.playerId;
+                const targetId = targetPlayerId;
+                const initiatorPlayer = state.players.find(p => p.id === initiatorId);
+                const targetPlayer = state.players.find(p => p.id === targetId);
+
+                const initialSelections: Record<string, string> = {};
+
+                // ターゲットがNPCの場合はランダムに選択済みにする
+                if (targetPlayer && targetPlayer.isNpc && targetPlayer.hand.length > 0) {
+                    const randomCard = targetPlayer.hand[Math.floor(Math.random() * targetPlayer.hand.length)];
+                    initialSelections[targetId] = randomCard.id;
+                }
+
+                // 実行者がNPCの場合もランダムに選択済みにする
+                if (initiatorPlayer && initiatorPlayer.isNpc && initiatorPlayer.hand.length > 0) {
+                    const randomCard = initiatorPlayer.hand[Math.floor(Math.random() * initiatorPlayer.hand.length)];
+                    initialSelections[initiatorId] = randomCard.id;
+                }
+
+                // 両者選択済みの場合は即実行
+                // (例: NPC vs NPC, または何らかの理由で即時決定した場合)
+                const hasInitiatorSelected = !initiatorPlayer || initiatorPlayer.hand.length === 0 || !!initialSelections[initiatorId];
+                const hasTargetSelected = !targetPlayer || targetPlayer.hand.length === 0 || !!initialSelections[targetId];
+
+                if (hasInitiatorSelected && hasTargetSelected) {
+                    // 一時的なStateを作成して実行
+                    const tempState: GameState = {
+                        ...state,
+                        exchangeState: {
+                            type: 'TRADE',
+                            selections: initialSelections,
+                            targetIds: [initiatorId, targetId]
+                        }
+                    };
+                    return executeTradeExchange(tempState, initiatorId, targetId);
+                }
+
+                return {
+                    ...state,
+                    phase: GamePhase.EXCHANGE_PHASE,
+                    pendingAction: null,
+                    exchangeState: {
+                        type: 'TRADE',
+                        selections: initialSelections,
+                        targetIds: [initiatorId, targetId]
+                    }
+                };
+            }
 
         default:
             return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null };
@@ -382,32 +564,25 @@ function declareWinner(
     const playerResults: PlayerResult[] = state.players.map(player => {
         const usedPlotCard = plotCardUsers.includes(player.id);
 
-        // 異常性癖者使用者はCRIMINALチームに所属（変態側）
-        const effectiveTeam = usedPlotCard ? 'CRIMINAL' : player.team;
+        let effectiveTeam: 'CITIZEN' | 'CRIMINAL' = player.team;
+        if (usedPlotCard) {
+            effectiveTeam = 'CRIMINAL';
+        }
 
-        // 勝利判定（新ルール）
         let isWinner = false;
-
         if (isCriminalWin) {
-            // 変態チーム勝利の場合:
-            // - 変態カードを持っている人（または変態カードを出した人）が勝利
-            // - 異常性癖者を使用した人も勝利
             const isCulprit = player.id === culpritPlayerId || player.id === mvpPlayerId;
             isWinner = isCulprit || usedPlotCard;
         } else {
-            // 逮捕/正常者勝利の場合:
-            // - カードを使用した人（MVP）のみが勝者
-            // - 他の市民は勝者ではない
-            isWinner = player.id === mvpPlayerId;
+            // 警察側勝利の場合
+            // MVPであっても、異常性癖者（usedPlotCard）なら勝利できない
+            isWinner = (player.id === mvpPlayerId) && !usedPlotCard;
         }
 
-        // MVP判定（このアクションで勝利を決めたプレイヤー）
         const isMVP = player.id === mvpPlayerId;
-
-        // 異常性癖者として勝利したか
         const isAccompliceWinner = usedPlotCard && isWinner;
 
-        return {
+        const baseResult = {
             playerId: player.id,
             playerName: player.name,
             team: effectiveTeam,
@@ -416,15 +591,79 @@ function declareWinner(
             isAccompliceWinner,
             usedPlotCard,
         };
+
+        // 変態度の計算
+        // victoryInfo.targetPlayerIdがnullの場合、calculateHentaiLevel内でマッチングしないようにする
+        const calcVictoryInfo: VictoryInfo = {
+            winnerTeam: winner,
+            victoryType,
+            mvpPlayerId,
+            targetPlayerId: targetPlayerId || '', // nullチェック: nullなら空文字にして誰にもマッチしないようにする
+            playerResults: []
+        };
+
+        const currentLevel = player.hentaiLevel || 0;
+        const newLevel = calculateHentaiLevel(currentLevel, baseResult as PlayerResult, calcVictoryInfo);
+
+        // 変態敗北時はデンジャーワードを引き継ぐ
+        let assignedWordForDisplay = player.assignedWord || null;
+        if (winner === 'DETECTIVE_TEAM' && player.id === targetPlayerId) {
+            // 変態カードのデンジャーワードを取得
+            const culpritCard = player.hand.find(c => c.type === 'culprit');
+            if (culpritCard?.assignedDangerWord) {
+                assignedWordForDisplay = culpritCard.assignedDangerWord;
+            }
+        }
+
+        // 次回の名前プレビュー
+        const { displayName, assignedWord: newAssignedWord, fullPrefix: newPrefix } = generateDisplayName(
+            newLevel,
+            player.name,
+            assignedWordForDisplay
+        );
+
+        // 変態敗北時はデンジャーワードを新しいassignedWordとして設定
+        const finalAssignedWord = (winner === 'DETECTIVE_TEAM' && player.id === targetPlayerId)
+            ? assignedWordForDisplay
+            : newAssignedWord;
+
+        return {
+            ...baseResult,
+            oldHentaiLevel: currentLevel,
+            newHentaiLevel: newLevel,
+            newDisplayName: displayName,
+            newPrefix: newPrefix || '常識人な',
+            newAssignedWord: finalAssignedWord || undefined
+        };
     });
 
-    // プレイヤーのチームを更新（異常性癖者使用者をCRIMINALに変更）
+    // プレイヤーのチームと変態度を更新
     const newPlayers = state.players.map(player => {
+        const result = playerResults.find(r => r.playerId === player.id);
+        const newLevel = result?.newHentaiLevel ?? (player.hentaiLevel || 0);
+        // チーム更新ロジック
         const usedPlotCard = plotCardUsers.includes(player.id);
+        let effectiveTeam: 'CITIZEN' | 'CRIMINAL' = player.team;
         if (usedPlotCard) {
-            return { ...player, team: 'CRIMINAL' as const };
+            effectiveTeam = 'CRIMINAL';
         }
-        return player;
+
+        // 変態カード所持者が敗北した場合、カードのDangerWordsを継承する
+        let assignedWord = player.assignedWord;
+        if (winner === 'DETECTIVE_TEAM' && player.id === targetPlayerId) {
+            // このプレイヤーが持っていた変態カードのDangerWordsを取得
+            const culpritCard = player.hand.find(c => c.type === 'culprit');
+            if (culpritCard?.assignedDangerWord) {
+                assignedWord = culpritCard.assignedDangerWord;
+            }
+        }
+
+        return {
+            ...player,
+            team: effectiveTeam,
+            hentaiLevel: newLevel,
+            assignedWord: assignedWord
+        };
     });
 
     // 勝利詳細情報を作成
@@ -484,50 +723,75 @@ export function getCulpritPlayer(state: GameState): Player | null {
  * 情報操作: 全員が左隣の人に手札を1枚渡す
  * （ローカルモードでは各自ランダムに1枚選んで渡す）
  */
+/**
+ * 情報操作: 全員が左隣の人に手札を1枚渡す
+ * （手札があるプレイヤー同士でのみ交換を行う）
+ */
 function executeInformationExchange(state: GameState): GameState {
-    const alivePlayers = state.players.filter(p => p.isAlive);
-    const playerCount = alivePlayers.length;
+    // 手札がある生存プレイヤーのみを対象とする（手札がないプレイヤーはスキップ）
+    const participants = state.players.filter(p => p.isAlive && p.hand.length > 0);
 
-    if (playerCount < 2) {
-        return { ...state, phase: GamePhase.RESOLVING_EFFECT };
+    if (participants.length < 2) {
+        // 交換相手がいない場合は何も起きない
+        return {
+            ...state,
+            phase: GamePhase.RESOLVING_EFFECT,
+            exchangeState: null,
+            pendingAction: null
+        };
     }
 
-    // 各プレイヤーが左隣に渡すカードをランダムに選択
-    const cardsToPass: (Card | null)[] = alivePlayers.map(player => {
-        if (player.hand.length === 0) return null;
-        const randomIndex = Math.floor(Math.random() * player.hand.length);
-        return player.hand[randomIndex];
+    // 選択されたカードを取得（ない場合はランダム）
+    const selections = state.exchangeState?.selections || {};
+    const cardsToPass = participants.map(player => {
+        const cardId = selections[player.id];
+        if (cardId) {
+            const selected = player.hand.find(c => c.id === cardId);
+            if (selected) return selected;
+        }
+        // フォールバック: ランダム
+        return player.hand[Math.floor(Math.random() * player.hand.length)];
     });
 
-    // カードを移動
-    const newPlayers = state.players.map(player => {
-        const aliveIndex = alivePlayers.findIndex(p => p.id === player.id);
-        if (aliveIndex === -1 || !player.isAlive) {
-            return player;
-        }
+    // プレイヤー状態を更新
+    const newPlayers = [...state.players];
+    const exchanges: { fromPlayerId: string; toPlayerId: string; cardId: string }[] = [];
 
-        // 左隣のインデックス（プレイヤーの右隣がこのプレイヤーにカードを渡す）
-        const rightNeighborIndex = (aliveIndex + playerCount - 1) % playerCount;
+    participants.forEach((player, index) => {
+        const playerIndexInGlobal = state.players.findIndex(p => p.id === player.id);
+
+        // 渡すカード
+        const cardToGive = cardsToPass[index];
+
+        // 受け取るカード（参加者リストの右隣＝前のインデックスの人から受け取る）
+        // 左隣に渡す = 右隣から受け取る
+        const rightNeighborIndex = (index + participants.length - 1) % participants.length;
         const cardToReceive = cardsToPass[rightNeighborIndex];
-        const cardToGive = cardsToPass[aliveIndex];
+        const rightNeighbor = participants[rightNeighborIndex];
 
         // 手札を更新
         let newHand = [...player.hand];
 
         // 渡すカードを削除
-        if (cardToGive) {
-            newHand = newHand.filter(c => c.id !== cardToGive.id);
-        }
+        newHand = newHand.filter(c => c.id !== cardToGive.id);
 
         // 受け取るカードを追加
-        if (cardToReceive) {
-            newHand.push(cardToReceive);
-        }
+        newHand.push(cardToReceive);
 
         // ソート
         newHand.sort((a, b) => a.sortOrder - b.sortOrder);
 
-        return { ...player, hand: newHand };
+        newPlayers[playerIndexInGlobal] = {
+            ...player,
+            hand: newHand
+        };
+
+        // 交換履歴を記録
+        exchanges.push({
+            fromPlayerId: rightNeighbor.id,
+            toPlayerId: player.id,
+            cardId: cardToReceive.id
+        });
     });
 
     return {
@@ -535,27 +799,42 @@ function executeInformationExchange(state: GameState): GameState {
         players: newPlayers,
         phase: GamePhase.RESOLVING_EFFECT,
         pendingAction: null,
+        exchangeState: null, // 交換状態をリセット
+        lastExchangeInfo: {  // 交換情報を記録
+            type: 'INFORMATION',
+            exchanges
+        }
     };
 }
 
 /**
  * うわさ: 全員が右隣の人の手札から1枚引く
  */
+/**
+ * うわさ: 全員が右隣の人の手札から1枚引く
+ * （手札があるプレイヤー同士でのみ交換を行う）
+ */
 function executeRumorExchange(state: GameState): GameState {
-    const alivePlayers = state.players.filter(p => p.isAlive);
-    const playerCount = alivePlayers.length;
+    // 手札がある生存プレイヤーのみを対象とする
+    const participants = state.players.filter(p => p.isAlive && p.hand.length > 0);
+    const participantCount = participants.length;
 
-    if (playerCount < 2) {
+    if (participantCount < 2) {
+        // 交換相手がいない場合は何も起きない
         return { ...state, phase: GamePhase.RESOLVING_EFFECT };
     }
 
     // 各プレイヤーが右隣から引くカードをランダムに選択
-    const cardsToDraw: (Card | null)[] = alivePlayers.map((_player, index) => {
-        // 右隣のプレイヤー
-        const rightNeighborIndex = (index + 1) % playerCount;
-        const rightNeighbor = alivePlayers[rightNeighborIndex];
+    const cardsToDraw = participants.map((_player, index) => {
+        // 参加者リスト内での右隣（index - 1）
+        // 左隣に渡す = 右隣から受け取る、というRumorの定義（時計回りにカードが動くイメージ）
+        // 以前のロジック: index-1 が右隣として実装されていたのでそれに合わせる
+        const rightNeighborIndex = (index - 1 + participantCount) % participantCount;
+        const rightNeighbor = participants[rightNeighborIndex];
 
+        // 参加者は必ず手札を持っているはずだが念のためチェック
         if (rightNeighbor.hand.length === 0) return null;
+
         const randomIndex = Math.floor(Math.random() * rightNeighbor.hand.length);
         return rightNeighbor.hand[randomIndex];
     });
@@ -563,32 +842,34 @@ function executeRumorExchange(state: GameState): GameState {
     // 交換情報を記録
     const exchanges: { fromPlayerId: string; toPlayerId: string; cardId: string }[] = [];
 
-    // カードを移動
-    const newPlayers = state.players.map(player => {
-        const aliveIndex = alivePlayers.findIndex(p => p.id === player.id);
-        if (aliveIndex === -1 || !player.isAlive) {
-            return player;
-        }
+    // 新しいプレイヤー状態を作成
+    const newPlayers = [...state.players];
 
-        // このプレイヤーが引くカード（右隣から引く）
-        const cardToDraw = cardsToDraw[aliveIndex];
+    // 参加者ごとに手札を更新
+    participants.forEach((player, index) => {
+        const playerIndexInGlobal = state.players.findIndex(p => p.id === player.id);
+
+        // このプレイヤーが引くカード
+        const cardToDraw = cardsToDraw[index];
+        if (!cardToDraw) return;
+
+        // 引かれる相手（右隣）
+        const rightNeighborIndex = (index - 1 + participantCount) % participantCount;
+        const fromPlayer = participants[rightNeighborIndex];
+
+        // 私からカードを引く人（左隣 = index + 1）
+        // 左隣の人は、私のカードを引く
+        const takerIndex = (index + 1) % participantCount;
+        const cardToBeTaken = cardsToDraw[takerIndex];
 
         // 交換情報を記録
-        if (cardToDraw) {
-            const rightNeighborIndex = (aliveIndex + 1) % playerCount;
-            const rightNeighbor = alivePlayers[rightNeighborIndex];
-            exchanges.push({
-                fromPlayerId: rightNeighbor.id,
-                toPlayerId: player.id,
-                cardId: cardToDraw.id,
-            });
-        }
+        exchanges.push({
+            fromPlayerId: fromPlayer.id,
+            toPlayerId: player.id,
+            cardId: cardToDraw.id,
+        });
 
-        // 左隣のプレイヤーがこのプレイヤーから引くカード
-        const leftNeighborIndex = (aliveIndex + playerCount - 1) % playerCount;
-        const cardToBeTaken = cardsToDraw[leftNeighborIndex];
-
-        // 手札を更新
+        // 手札更新
         let newHand = [...player.hand];
 
         // 取られるカードを削除
@@ -597,14 +878,16 @@ function executeRumorExchange(state: GameState): GameState {
         }
 
         // 引くカードを追加
-        if (cardToDraw) {
-            newHand.push(cardToDraw);
-        }
+        newHand.push(cardToDraw);
 
         // ソート
         newHand.sort((a, b) => a.sortOrder - b.sortOrder);
 
-        return { ...player, hand: newHand };
+        // Globalなプレイヤーリストを更新
+        newPlayers[playerIndexInGlobal] = {
+            ...player,
+            hand: newHand
+        };
     });
 
     return {
@@ -628,7 +911,7 @@ function executeTradeExchange(state: GameState, playerId: string, targetPlayerId
     const targetIndex = state.players.findIndex(p => p.id === targetPlayerId);
 
     if (playerIndex === -1 || targetIndex === -1) {
-        return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null };
+        return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null, exchangeState: null };
     }
 
     const player = state.players[playerIndex];
@@ -636,12 +919,25 @@ function executeTradeExchange(state: GameState, playerId: string, targetPlayerId
 
     // 両者に手札がない場合は交換なし
     if (player.hand.length === 0 || target.hand.length === 0) {
-        return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null };
+        return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null, exchangeState: null };
     }
 
-    // ランダムに1枚ずつ選択
-    const playerCardIndex = Math.floor(Math.random() * player.hand.length);
-    const targetCardIndex = Math.floor(Math.random() * target.hand.length);
+    // 選択されたカードIDを取得
+    const selections = state.exchangeState?.selections || {};
+    const playerCardId = selections[playerId];
+    const targetCardId = selections[targetPlayerId];
+
+    if (!playerCardId || !targetCardId) {
+        // 万が一選択がない場合（通常ありえない）
+        return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null, exchangeState: null };
+    }
+
+    const playerCardIndex = player.hand.findIndex(c => c.id === playerCardId);
+    const targetCardIndex = target.hand.findIndex(c => c.id === targetCardId);
+
+    if (playerCardIndex === -1 || targetCardIndex === -1) {
+        return { ...state, phase: GamePhase.RESOLVING_EFFECT, pendingAction: null, exchangeState: null };
+    }
 
     const playerCard = player.hand[playerCardIndex];
     const targetCard = target.hand[targetCardIndex];
@@ -649,24 +945,134 @@ function executeTradeExchange(state: GameState, playerId: string, targetPlayerId
     // 手札を交換
     const newPlayers = [...state.players];
 
-    // プレイヤーの手札を更新
+    // 履歴情報を付与した新しいカードを作成
+    const cardForTarget = {
+        ...playerCard,
+        tradeHistory: {
+            type: 'TRADE' as const,
+            fromName: player.name,
+            toName: target.name
+        }
+    };
+
+    const cardForPlayer = {
+        ...targetCard,
+        tradeHistory: {
+            type: 'TRADE' as const,
+            fromName: target.name,
+            toName: player.name
+        }
+    };
+
+    // プレイヤーの手札を更新（ターゲットからのカードを受け取る）
     const newPlayerHand = [...player.hand];
-    newPlayerHand.splice(playerCardIndex, 1, targetCard);
+    newPlayerHand.splice(playerCardIndex, 1, cardForPlayer);
     newPlayerHand.sort((a, b) => a.sortOrder - b.sortOrder);
     newPlayers[playerIndex] = { ...player, hand: newPlayerHand };
 
-    // ターゲットの手札を更新
+    // ターゲットの手札を更新（プレイヤーからのカードを受け取る）
     const newTargetHand = [...target.hand];
-    newTargetHand.splice(targetCardIndex, 1, playerCard);
+    newTargetHand.splice(targetCardIndex, 1, cardForTarget);
     newTargetHand.sort((a, b) => a.sortOrder - b.sortOrder);
     newPlayers[targetIndex] = { ...target, hand: newTargetHand };
+
+    // tableCardsの取り引きカードにも交換履歴を付与
+    const updatedTableCards = state.tableCards.map((card, index) => {
+        // 最後に出されたカードが取り引きカードの場合、履歴を付与
+        if (index === state.tableCards.length - 1 && card.type === 'trade') {
+            return {
+                ...card,
+                tradeHistory: {
+                    type: 'TRADE' as const,
+                    fromName: player.name,
+                    toName: target.name
+                }
+            };
+        }
+        return card;
+    });
 
     return {
         ...state,
         players: newPlayers,
+        tableCards: updatedTableCards,
         phase: GamePhase.RESOLVING_EFFECT,
         pendingAction: null,
+        exchangeState: null, // Reset here
+        lastExchangeInfo: {
+            type: 'TRADE',
+            exchanges: [
+                {
+                    fromPlayerId: playerId,
+                    toPlayerId: targetPlayerId,
+                    cardId: playerCard.id
+                },
+                {
+                    fromPlayerId: targetPlayerId,
+                    toPlayerId: playerId,
+                    cardId: targetCard.id
+                }
+            ]
+        }
     };
+}
+
+
+/**
+ * 交換用カードを選択（情報操作など）
+ */
+export function submitExchangeCard(state: GameState, playerId: string, cardId: string): GameState {
+    if (state.phase !== GamePhase.EXCHANGE_PHASE || !state.exchangeState) {
+        return state;
+    }
+
+    const player = state.players.find(p => p.id === playerId);
+    if (!player || !player.hand.some(c => c.id === cardId)) {
+        return state;
+    }
+
+    // 選択を保存
+    const newSelections = {
+        ...state.exchangeState.selections,
+        [playerId]: cardId
+    };
+
+    const newState = {
+        ...state,
+        exchangeState: {
+            ...state.exchangeState,
+            selections: newSelections
+        }
+    };
+
+    // 全員選択したかチェック
+    let isAllReady = false;
+
+    if (newState.exchangeState.type === 'TRADE' && newState.exchangeState.targetIds) {
+        // TRADEの場合は対象者のみチェック
+        isAllReady = newState.exchangeState.targetIds.every(id => {
+            const player = newState.players.find(p => p.id === id);
+            return !player || player.hand.length === 0 || !!newSelections[id];
+        });
+    } else {
+        // INFORMATION 等
+        const alivePlayers = newState.players.filter(p => p.isAlive);
+        isAllReady = alivePlayers.every(p =>
+            p.hand.length === 0 || // 手札がない場合は選択不要
+            !!newSelections[p.id] // 選択済み
+        );
+    }
+
+    if (isAllReady) {
+        if (newState.exchangeState.type === 'INFORMATION') {
+            return executeInformationExchange(newState);
+        } else if (newState.exchangeState.type === 'TRADE' && newState.exchangeState.targetIds) {
+            const [p1, p2] = newState.exchangeState.targetIds;
+            return executeTradeExchange(newState, p1, p2);
+        }
+    }
+
+    return newState;
 }
 
 /**
@@ -690,33 +1096,100 @@ export function selectCard(state: GameState, cardId: string): GameState {
     }
 
     // 正常者の判定
-    if (state.pendingAction.cardType === 'dog') { // 元のカードがdogの場合（pendingActionにcardTypeを保存している前提）
-        // 現状のpendingAction.cardTypeは processPendingAction での分岐に使われているが、
-        // 正常者効果の実行中であることを知る必要がある。
-        // processPendingActionで書き換える際に cardType を残しておけばOK。
-    }
+    // 正常者(dog)によって選択されたカードが変態(culprit)だった場合、相手がアリバイを持っていても勝利となる
+    const isDogAction = state.pendingAction.type === 'SELECT_CARD' && state.pendingAction.cardType === 'dog';
 
-    // しかし processPendingAction では pendingAction を更新して返している。
-    // pendingAction.cardType は 'dog' のままであるべきだが、 
-    // 前の修正で `...state.pendingAction` を展開しているので `cardType` は保持されているはず。
-
-    if (selectedCard.type === 'culprit') {
-        // 変態を当てた！
+    if (isDogAction) {
         const activePlayer = state.players[state.activePlayerIndex];
-        return declareWinner(
-            state,
-            'DETECTIVE_TEAM',
-            'DOG',
-            activePlayer.id,
-            target.id
-        );
-    } else {
-        // 外れ
+        const isSuccess = selectedCard.type === 'culprit';
+
+        // 演出情報を作成
+        const dogAnimationInfo: ArrestAnimationInfo = {
+            cardType: 'dog',
+            sourcePlayerId: activePlayer.id,
+            targetPlayerId: targetPlayerId,
+            selectedCardId: selectedCard.id,
+            selectedCardType: selectedCard.type,
+            isSuccess: isSuccess
+        };
+
+        // 演出フェーズへ（勝敗判定は演出後に行う）
         return {
             ...state,
             phase: GamePhase.RESOLVING_EFFECT,
             pendingAction: null,
-            systemMessage: '変態ではありませんでした', // 判定結果メッセージ
+            arrestAnimationInfo: dogAnimationInfo
         };
     }
+
+    // 他のカード効果でカード選択が必要な場合（現時点では正常者のみだが、将来的に拡張される可能性）
+    // 現状は正常者以外のカード選択は想定されていないため、ここには到達しないはず
+    return {
+        ...state,
+        phase: GamePhase.RESOLVING_EFFECT,
+        pendingAction: null,
+        systemMessage: '不明なカード選択アクションです',
+    };
+}
+
+/**
+ * 逮捕/通報演出完了後の処理
+ * 演出が終了したらこの関数を呼び、勝利判定またはゲーム継続を行う
+ */
+export function completeArrestAnimation(state: GameState): GameState {
+    if (!state.arrestAnimationInfo) {
+        return state;
+    }
+
+    const { cardType, sourcePlayerId, targetPlayerId, isSuccess } = state.arrestAnimationInfo;
+
+    // 演出情報をクリア
+    const clearedState: GameState = {
+        ...state,
+        arrestAnimationInfo: null
+    };
+
+    if (isSuccess) {
+        // 勝利！
+        const victoryType: VictoryType = cardType === 'detective' ? 'DETECTIVE' : 'DOG';
+        return declareWinner(
+            clearedState,
+            'DETECTIVE_TEAM',
+            victoryType,
+            sourcePlayerId,
+            targetPlayerId
+        );
+    } else {
+        // 失敗 → ゲーム継続
+        return {
+            ...clearedState,
+            phase: GamePhase.TURN_END,
+        };
+    }
+}
+
+/**
+ * 変態勝利演出完了後の処理
+ * 演出が終了したらこの関数を呼び、勝利を確定させる
+ */
+export function completeCulpritVictoryAnimation(state: GameState): GameState {
+    if (!state.culpritVictoryAnimationInfo) {
+        return state;
+    }
+
+    const { culpritPlayerId } = state.culpritVictoryAnimationInfo;
+
+    // 演出情報をクリアして勝利確定
+    const clearedState: GameState = {
+        ...state,
+        culpritVictoryAnimationInfo: null
+    };
+
+    return declareWinner(
+        clearedState,
+        'CRIMINAL_TEAM',
+        'CULPRIT_ESCAPE',
+        culpritPlayerId,
+        null
+    );
 }

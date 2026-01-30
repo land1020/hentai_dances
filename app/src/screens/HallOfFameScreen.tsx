@@ -10,9 +10,7 @@ import {
     Trophy,
     Crown,
     Trash2,
-    User,
-    Shield,
-    Skull
+    User
 } from 'lucide-react';
 import type { GameResult } from '../types';
 
@@ -164,8 +162,8 @@ export default function HallOfFameScreen() {
                                             {record.winnerName}
                                         </span>
                                         <span className={`text-xs px-2 py-0.5 rounded ${record.winnerRole === 'CULPRIT' || record.winnerRole === 'DETECTIVE'
-                                                ? 'bg-red-500/20 text-red-400'
-                                                : 'bg-blue-500/20 text-blue-400'
+                                            ? 'bg-red-500/20 text-red-400'
+                                            : 'bg-blue-500/20 text-blue-400'
                                             }`}>
                                             {record.winnerRole === 'CULPRIT' && '変態'}
                                             {record.winnerRole === 'DETECTIVE' && '警察'}
@@ -187,23 +185,29 @@ export default function HallOfFameScreen() {
                                 </div>
 
                                 {record.players && (
-                                    <div className="mt-2 flex flex-wrap gap-1">
-                                        {record.players.slice(0, 4).map((player, i) => (
-                                            <span
-                                                key={i}
-                                                className={`text-xs px-2 py-0.5 rounded ${player.isWinner
-                                                        ? 'bg-yellow-500/20 text-yellow-400'
-                                                        : 'bg-gray-500/20 text-gray-400'
-                                                    }`}
-                                            >
-                                                {player.name}
-                                            </span>
-                                        ))}
-                                        {record.players.length > 4 && (
-                                            <span className="text-xs text-gray-500">
-                                                +{record.players.length - 4}
-                                            </span>
-                                        )}
+                                    <div className="mt-3 space-y-1">
+                                        {[...record.players]
+                                            .sort((a, b) => (b.hentaiLevel || 0) - (a.hentaiLevel || 0))
+                                            .map((player, i) => (
+                                                <div
+                                                    key={i}
+                                                    className={`flex items-center justify-between text-xs px-2 py-1 rounded ${player.isWinner
+                                                            ? 'bg-yellow-500/20'
+                                                            : 'bg-gray-500/10'
+                                                        }`}
+                                                >
+                                                    <span className={player.isWinner ? 'text-yellow-400' : 'text-gray-300'}>
+                                                        {player.prefix}{player.name}
+                                                    </span>
+                                                    <span className={`font-bold ${(player.hentaiLevel || 0) >= 3 ? 'text-red-400' :
+                                                            (player.hentaiLevel || 0) >= 2 ? 'text-orange-400' :
+                                                                (player.hentaiLevel || 0) >= 1 ? 'text-yellow-400' :
+                                                                    'text-gray-500'
+                                                        }`}>
+                                                        Lv.{player.hentaiLevel || 0}
+                                                    </span>
+                                                </div>
+                                            ))}
                                     </div>
                                 )}
                             </motion.div>

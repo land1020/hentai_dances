@@ -14,10 +14,14 @@ import {
     User,
     Bot,
     Skull,
-    Shield
+    Shield,
+    LogOut
 } from 'lucide-react';
 import { loadRoomState, saveRoomState, clearRoomState, type LocalRoomState } from '../store/gameStore';
-import type { Player } from '../types';
+import type { Player, GameResult } from '../types';
+import { initializeGame } from '../engine/GameEngine';
+import HentaiGauge from '../components/HentaiGauge';
+import { addToHallOfFame } from './HallOfFameScreen';
 
 export default function ResultScreen() {
     const { roomId } = useParams();
@@ -25,6 +29,7 @@ export default function ResultScreen() {
     const [roomState, setRoomState] = useState<LocalRoomState | null>(null);
     const [showConfetti, setShowConfetti] = useState(true);
     const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+    const [isRegistered, setIsRegistered] = useState(false);
 
     useEffect(() => {
         const handleResize = () => {
@@ -53,12 +58,56 @@ export default function ResultScreen() {
         return () => clearTimeout(timer);
     }, [roomId, navigate]);
 
-    // もう一度遊ぶ
+    // 次のゲームのためのプレイヤー情報を生成
+    const getNextPlayers = () => {
+        if (!roomState || !roomState.players) return [];
+
+        const victoryInfo = roomState.gameState?.victoryInfo;
+
+        return roomState.players.map(p => {
+            const gamePlayer = roomState.gameState?.players.find(gp => gp.id === p.id);
+            const playerResult = victoryInfo?.playerResults?.find(r => r.playerId === p.id);
+
+            if (gamePlayer) {
+                return {
+                    ...p,
+                    hentaiLevel: gamePlayer.hentaiLevel,
+                    assignedWord: playerResult?.newAssignedWord || gamePlayer.assignedWord,
+                    // リザルト画面で計算された二つ名を引き継ぐ
+                    currentPrefix: playerResult?.newPrefix || gamePlayer.currentPrefix,
+                };
+            }
+            return p;
+        });
+    };
+
+    // もう一度遊ぶ（即時リスタート）
     const handlePlayAgain = () => {
         if (roomState) {
-            // ゲーム状態をリセットしてロビーへ
-            const newState = {
+            const updatedPlayers = getNextPlayers();
+            // ゲーム開始処理
+            const newGameState = initializeGame(updatedPlayers);
+
+            const newState: LocalRoomState = {
                 ...roomState,
+                players: updatedPlayers,
+                status: 'PLAYING' as const,
+                gameState: newGameState,
+            };
+            saveRoomState(newState);
+            navigate(`/game/${roomId}`);
+        }
+    };
+
+    // ロビーに戻る
+    const handleBackToLobby = () => {
+        if (roomState) {
+            const updatedPlayers = getNextPlayers();
+
+            // ロビー待機状態へ
+            const newState: LocalRoomState = {
+                ...roomState,
+                players: updatedPlayers,
                 status: 'WAITING' as const,
                 gameState: null,
             };
@@ -73,10 +122,54 @@ export default function ResultScreen() {
         navigate('/');
     };
 
-    // 殿堂入りへ
-    const handleHallOfFame = () => {
-        navigate('/hall-of-fame');
+    // 殿堂入りに登録
+    const handleRegisterHallOfFame = () => {
+        if (!roomState || !roomState.gameState || isRegistered) return;
+
+        const { gameState } = roomState;
+        const victoryInfo = gameState.victoryInfo;
+        const mvpResult = victoryInfo?.playerResults?.find(r => r.isMVP);
+        const mvpPlayer = mvpResult ? gameState.players.find(p => p.id === mvpResult.playerId) : null;
+
+        // 勝者の役職を決定
+        let winnerRole: 'CULPRIT' | 'DETECTIVE' | 'DOG' | 'CITIZEN' = 'CITIZEN';
+        if (victoryInfo?.victoryType === 'CULPRIT_ESCAPE') {
+            winnerRole = 'CULPRIT';
+        } else if (victoryInfo?.victoryType === 'DETECTIVE') {
+            winnerRole = 'DETECTIVE';
+        } else if (victoryInfo?.victoryType === 'DOG') {
+            winnerRole = 'DOG';
+        }
+
+        const result: GameResult = {
+            id: `game-${Date.now()}`,
+            roomId: roomState.roomId,
+            playedAt: new Date(),
+            winnerName: mvpPlayer?.name || '不明',
+            winnerRole,
+            mvp: mvpPlayer?.name,
+            totalTurns: gameState.turnCount,
+            members: gameState.players.map(p => p.name),
+            players: gameState.players.map(p => {
+                const playerResult = victoryInfo?.playerResults?.find(r => r.playerId === p.id);
+                return {
+                    id: p.id,
+                    name: p.name,
+                    prefix: playerResult?.newPrefix || p.currentPrefix || '',
+                    hentaiLevel: p.hentaiLevel || 0,
+                    score: p.hentaiLevel || 0,
+                    team: p.team,
+                    isWinner: playerResult?.isWinner || false,
+                };
+            })
+        };
+
+        addToHallOfFame(result);
+        setIsRegistered(true);
     };
+
+    // ルームマスターかどうかを判定
+    const isRoomMaster = roomState?.hostId === roomState?.players.find(p => !p.isNpc)?.id;
 
     if (!roomState || !roomState.gameState) {
         return (
@@ -92,58 +185,181 @@ export default function ResultScreen() {
     const victoryInfo = gameState.victoryInfo;
     const isCriminalWin = winner === 'CRIMINAL_TEAM';
 
-    // 勝利タイプに応じたメッセージを取得
-    const getVictoryMessage = () => {
-        if (!victoryInfo) {
-            return isCriminalWin ? '変態が最後まで生き残りました！' : '変態を捕まえました！';
-        }
-        switch (victoryInfo.victoryType) {
-            case 'DETECTIVE':
-                return '警察が変態を見抜きました！';
-            case 'DOG':
-                return '正常者が変態カードを引き当てました！';
-            case 'CULPRIT_ESCAPE':
-                return '変態が最後までカードを出し切りました！';
-            default:
-                return isCriminalWin ? '変態が最後まで生き残りました！' : '変態を捕まえました！';
-        }
-    };
+    // 変態プレイヤーと変態カードを取得
+    const culpritPlayer = gameState.players.find(p => p.hand.some(c => c.type === 'culprit'));
+    const culpritCard = culpritPlayer?.hand.find(c => c.type === 'culprit');
+    // 変態カードのデンジャーワードを使用、なければgameStateのdangerWordを使用
+    const dangerWord = culpritCard?.assignedDangerWord || gameState.dangerWord || '';
+    const culpritDisplayName = dangerWord ? `${dangerWord}変態` : '変態';
 
     // MVP（メイン勝者）を取得
     const mvpResult = victoryInfo?.playerResults?.find(r => r.isMVP);
     const mvpPlayer = mvpResult ? gameState.players.find(p => p.id === mvpResult.playerId) : null;
 
-    // 勝者・敗者を分類（victoryInfoがある場合はそれを使用）
-    const winners: (Player & { isAccomplice?: boolean })[] = [];
-    const losers: Player[] = [];
+    // 勝者・敗者リストの生成
+    const resultList = victoryInfo?.playerResults || [];
 
-    if (victoryInfo?.playerResults) {
-        // victoryInfoから勝敗を取得
-        victoryInfo.playerResults.forEach(result => {
-            const player = gameState.players.find(p => p.id === result.playerId);
-            if (player) {
-                if (result.isWinner) {
-                    winners.push({ ...player, isAccomplice: result.isAccompliceWinner });
-                } else {
-                    losers.push(player);
-                }
-            }
-        });
-    } else {
-        // 後方互換: victoryInfoがない場合は従来のロジック
+    // 結果データとプレイヤーデータを結合
+    const combinedResults = resultList.map(result => {
+        const player = gameState.players.find(p => p.id === result.playerId);
+        return { result, player };
+    }).filter((item): item is { result: typeof resultList[0], player: Player } => !!item.player);
+
+    // victoryInfoがない場合（後方互換）のフォールバック
+    if (combinedResults.length === 0) {
         gameState.players.forEach(player => {
-            const isWinner =
-                (isCriminalWin && player.team === 'CRIMINAL') ||
-                (!isCriminalWin && player.team === 'CITIZEN');
-
-            if (isWinner) {
-                winners.push(player);
-            } else {
-                losers.push(player);
-            }
+            const isWinner = (isCriminalWin && player.team === 'CRIMINAL') || (!isCriminalWin && player.team === 'CITIZEN');
+            combinedResults.push({
+                player,
+                result: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    team: player.team,
+                    isWinner,
+                    isMVP: false,
+                    isAccompliceWinner: false,
+                    usedPlotCard: false,
+                    // 互換性のため古いレベルを使用
+                    oldHentaiLevel: player.hentaiLevel,
+                    newHentaiLevel: player.hentaiLevel
+                }
+            });
         });
     }
 
+    const winners = combinedResults.filter(item => item.result.isWinner);
+    const losers = combinedResults.filter(item => !item.result.isWinner);
+    const isNoWinner = winners.length === 0;
+
+    // 勝利タイプに応じたメッセージを取得
+    const getVictoryMessage = () => {
+        if (isNoWinner) {
+            return `${culpritDisplayName}を見抜きましたが、異常性癖者だったためまとめて逮捕しました`;
+        }
+        if (!victoryInfo) {
+            return isCriminalWin ? `${culpritDisplayName}が最後まで生き残りました！` : `${culpritDisplayName}を捕まえました！`;
+        }
+        switch (victoryInfo.victoryType) {
+            case 'DETECTIVE':
+                return `警察が${culpritDisplayName}を見抜きました！`;
+            case 'DOG':
+                return `通報カードで${culpritDisplayName}を発見しました！`;
+            case 'CULPRIT_ESCAPE':
+                return `${culpritDisplayName}が最後までカードを出し切りました！`;
+            default:
+                return isCriminalWin ? `${culpritDisplayName}が最後まで生き残りました！` : `${culpritDisplayName}を捕まえました！`;
+        }
+    };
+
+    // プレイヤーカードのレンダリング関数
+    const renderPlayerCard = (item: { result: any, player: Player }, isWinner: boolean) => {
+        const { result, player } = item;
+        const levelDiff = (result.newHentaiLevel ?? 0) - (result.oldHentaiLevel ?? 0);
+
+        // 変態度表示: 敗北した変態で強制レベル3の場合は「UP(3)」と表示
+        const isCulpritLoser = !isWinner && player.team === 'CRIMINAL';
+        const newLevel = result.newHentaiLevel ?? player.hentaiLevel ?? 0;
+        const isForced3 = isCulpritLoser && newLevel === 3 && (result.oldHentaiLevel ?? 0) < 3;
+
+        return (
+            <div
+                key={player.id}
+                className={`flex flex-col p-3 rounded-lg border relative ${isWinner ? 'bg-yellow-500/10' : 'bg-gray-500/10 opacity-80'
+                    }`}
+                style={{ borderColor: player.color || (isWinner ? 'rgba(234, 179, 8, 0.3)' : 'rgba(107, 114, 128, 0.3)') }}
+            >
+                <div className="flex items-center gap-2 mb-2">
+                    {player.isNpc ? (
+                        <Bot className="w-5 h-5 text-blue-400" />
+                    ) : (
+                        <User className="w-5 h-5 text-purple-400" />
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                        <div className="font-bold text-sm truncate">
+                            {player.name}
+                        </div>
+                        {/* 称号表示 */}
+                        <div className="font-medium text-xs flex items-center gap-2 flex-wrap">
+                            {player.currentPrefix && (
+                                <span className={player.isCursed ? 'text-red-400' : 'text-gray-400'}>
+                                    {player.currentPrefix}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* MVP バッジ */}
+                    {result.isMVP && (
+                        <span className="px-1.5 py-0.5 text-xs bg-yellow-500/30 text-yellow-300 rounded font-bold whitespace-nowrap">
+                            MVP
+                        </span>
+                    )}
+                </div>
+
+                {/* 変態度ゲージ & 変動 */}
+                <div className="flex items-center justify-between bg-black/20 rounded p-1 mb-2">
+                    <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500">変態度:</span>
+                        <HentaiGauge level={newLevel} />
+                    </div>
+                    {/* 変態度変動表示 */}
+                    {isForced3 ? (
+                        // 強制レベル3（敗北した変態）
+                        <span className="text-xs font-bold text-orange-400">
+                            UP (3)
+                        </span>
+                    ) : levelDiff !== 0 ? (
+                        <span className={`text-xs font-bold ${levelDiff > 0 ? 'text-orange-400' : 'text-blue-400'}`}>
+                            {levelDiff > 0 ? `UP (+${levelDiff})` : `DOWN (${levelDiff})`}
+                        </span>
+                    ) : null}
+                </div>
+
+                {/* 新しい名前（次回予告） */}
+                {result.newDisplayName && result.newDisplayName !== (player.currentPrefix ? player.currentPrefix + player.name : player.name) && (
+                    <div className="text-xs text-pink-300 mt-1 animate-pulse">
+                        Next: {result.newDisplayName}
+                    </div>
+                )}
+
+                <div className="text-xs text-gray-500 mt-1">
+                    {(() => {
+                        // 変態かどうかを判定
+                        // - 手札に変態カードを持っている
+                        // - teamがCRIMINAL
+                        // - 変態チーム勝利時のMVP（変態カードを出して勝利した）
+                        const hasCulpritCard = item.player.hand.some(c => c.type === 'culprit');
+                        const isCulpritMVP = isCriminalWin && result.isMVP && victoryInfo?.victoryType === 'CULPRIT_ESCAPE';
+                        const isCulpritPlayer = hasCulpritCard || isCulpritMVP || item.player.team === 'CRIMINAL';
+
+                        if (isCulpritPlayer) {
+                            // 変態本人かどうか
+                            const isCulprit = hasCulpritCard || isCulpritMVP;
+                            return (
+                                <span className="text-red-400 flex items-center gap-1">
+                                    <Skull className="w-3 h-3" />
+                                    {isCulprit
+                                        ? '変態'
+                                        : result.usedPlotCard
+                                            ? '異常性癖者'
+                                            : '共犯者'}
+                                </span>
+                            );
+                        } else {
+                            return mvpPlayer?.id === item.player.id && (
+                                <span className="text-cyan-400 flex items-center gap-1">
+                                    <Shield className="w-3 h-3" />
+                                    {victoryInfo?.victoryType === 'DETECTIVE' && '逮捕で勝利'}
+                                    {victoryInfo?.victoryType === 'DOG' && '通報で勝利'}
+                                </span>
+                            );
+                        }
+                    })()}
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="min-h-screen p-4">
@@ -170,7 +386,7 @@ export default function ResultScreen() {
                         {isCriminalWin ? '🎭' : '🚔'}
                     </div>
                     <h1 className="text-4xl font-black mb-2">
-                        {isCriminalWin ? '変態の勝利！' : '警察の勝利！'}
+                        {isNoWinner ? '勝利？' : (isCriminalWin ? '変態の勝利！' : '警察の勝利！')}
                     </h1>
                     <p className="text-gray-400 mb-4">
                         {getVictoryMessage()}
@@ -196,56 +412,7 @@ export default function ResultScreen() {
                         <h2 className="text-lg font-bold text-yellow-400">勝者</h2>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                        {winners.map(player => (
-                            <div
-                                key={player.id}
-                                className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border"
-                                style={{ borderColor: player.color || 'rgba(234, 179, 8, 0.3)' }}
-                            >
-                                {player.isNpc ? (
-                                    <Bot className="w-5 h-5 text-blue-400" />
-                                ) : (
-                                    <User className="w-5 h-5 text-purple-400" />
-                                )}
-                                <div className="flex-1">
-                                    <div className="font-medium text-sm flex items-center gap-2">
-                                        {player.currentPrefix && (
-                                            <span className={player.isCursed ? 'text-red-400' : 'text-gray-400'}>
-                                                {player.currentPrefix}
-                                            </span>
-                                        )}
-                                        {player.name}
-                                        {/* MVP バッジ */}
-                                        {mvpPlayer?.id === player.id && (
-                                            <span className="px-1.5 py-0.5 text-xs bg-yellow-500/30 text-yellow-300 rounded font-bold">
-                                                MVP
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                        {player.team === 'CRIMINAL' ? (
-                                            <span className="text-red-400 flex items-center gap-1">
-                                                <Skull className="w-3 h-3" />
-                                                {player.hand.some(c => c.type === 'culprit') || (victoryInfo?.victoryType === 'CULPRIT_ESCAPE' && mvpPlayer?.id === player.id)
-                                                    ? '変態として勝利'
-                                                    : player.isAccomplice
-                                                        ? '異常性癖者として勝利'
-                                                        : '共犯者'}
-                                            </span>
-                                        ) : (
-                                            /* 勝利タイプに応じた役割を表示（市民は非表示） */
-                                            mvpPlayer?.id === player.id && (
-                                                <span className="text-cyan-400 flex items-center gap-1">
-                                                    <Shield className="w-3 h-3" />
-                                                    {victoryInfo?.victoryType === 'DETECTIVE' && '逮捕で勝利'}
-                                                    {victoryInfo?.victoryType === 'DOG' && '正常者で勝利'}
-                                                </span>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                        {winners.map(item => renderPlayerCard(item, true))}
                     </div>
                 </motion.div>
 
@@ -262,40 +429,7 @@ export default function ResultScreen() {
                             <h2 className="text-lg font-bold text-gray-400">敗者</h2>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                            {losers.map(player => (
-                                <div
-                                    key={player.id}
-                                    className="flex items-center gap-2 p-3 rounded-lg bg-gray-500/10 border opacity-60"
-                                    style={{ borderColor: player.color || 'rgba(107, 114, 128, 0.3)' }}
-                                >
-                                    {player.isNpc ? (
-                                        <Bot className="w-5 h-5 text-blue-400" />
-                                    ) : (
-                                        <User className="w-5 h-5 text-purple-400" />
-                                    )}
-                                    <div>
-                                        <div className="font-medium text-sm">
-                                            {player.currentPrefix && (
-                                                <span className={player.isCursed ? 'text-red-400' : 'text-gray-400'}>
-                                                    {player.currentPrefix}
-                                                </span>
-                                            )}
-                                            {player.name}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                            {/* 変態表示: チームがCRIMINAL または 逮捕された対象 */}
-                                            {player.team === 'CRIMINAL' || victoryInfo?.targetPlayerId === player.id ? (
-                                                <span className="text-red-400 flex items-center gap-1">
-                                                    <Skull className="w-3 h-3" />
-                                                    {player.hand.some(c => c.type === 'culprit') || victoryInfo?.targetPlayerId === player.id
-                                                        ? '変態'
-                                                        : '異常性癖者'}
-                                                </span>
-                                            ) : null}
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
+                            {losers.map(item => renderPlayerCard(item, false))}
                         </div>
                     </motion.div>
                 )}
@@ -336,12 +470,26 @@ export default function ResultScreen() {
                     </button>
 
                     <button
-                        onClick={handleHallOfFame}
+                        onClick={handleBackToLobby}
                         className="btn-secondary w-full flex items-center justify-center gap-2"
                     >
-                        <Trophy className="w-5 h-5" />
-                        殿堂入りを見る
+                        <LogOut className="w-5 h-5" />
+                        ロビーに戻る
                     </button>
+
+                    {isRoomMaster && (
+                        <button
+                            onClick={handleRegisterHallOfFame}
+                            disabled={isRegistered}
+                            className={`w-full flex items-center justify-center gap-2 ${isRegistered
+                                ? 'btn-secondary opacity-50 cursor-not-allowed'
+                                : 'btn-secondary hover:bg-yellow-500/20 border-yellow-500/50'
+                                }`}
+                        >
+                            <Trophy className="w-5 h-5" />
+                            {isRegistered ? '殿堂入りに登録済み' : '殿堂入りに登録'}
+                        </button>
+                    )}
 
                     <button
                         onClick={handleGoHome}

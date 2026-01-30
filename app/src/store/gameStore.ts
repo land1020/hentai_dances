@@ -28,6 +28,9 @@ export const PLAYER_COLORS = [
     '#9B5DE5', // Purple
     '#F15BB5', // Pink
     '#00BBF9', // Blue
+    '#8AC926', // Lime Green
+    '#CD84F1', // Lavender
+    '#ED4C67', // Rose
 ];
 
 // 初期状態を作成
@@ -42,7 +45,9 @@ export function createInitialRoomState(roomId: string, hostId: string, hostName:
             isNpc: false,
             isAlive: true,
             team: 'CITIZEN',
-            currentPrefix: null,
+            currentPrefix: '常識人な',
+            assignedWord: null,
+            hentaiLevel: 0,
             isCursed: false,
             cursedPrefix: null,
             color: PLAYER_COLORS[0],
@@ -92,7 +97,9 @@ export function addNpc(state: LocalRoomState): LocalRoomState {
         isNpc: true,
         isAlive: true,
         team: 'CITIZEN',
-        currentPrefix: null,
+        currentPrefix: '常識人な',
+        assignedWord: null,
+        hentaiLevel: 0,
         isCursed: false,
         cursedPrefix: null,
         color: PLAYER_COLORS[state.players.length % PLAYER_COLORS.length],
@@ -137,6 +144,18 @@ export function updatePlayerColor(state: LocalRoomState, playerId: string, color
     return newState;
 }
 
+// プレイヤー名を更新
+export function updatePlayerName(state: LocalRoomState, playerId: string, name: string): LocalRoomState {
+    const newState = {
+        ...state,
+        players: state.players.map(p =>
+            p.id === playerId ? { ...p, name } : p
+        ),
+    };
+    saveRoomState(newState);
+    return newState;
+}
+
 // ゲーム開始
 export function startGame(state: LocalRoomState): LocalRoomState {
     const newState = {
@@ -153,6 +172,7 @@ export function startGame(state: LocalRoomState): LocalRoomState {
             victoryInfo: null,
             pendingAction: null,
             dangerWord: null,
+            playedLog: [],
         },
     };
 

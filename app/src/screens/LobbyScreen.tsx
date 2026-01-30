@@ -17,6 +17,7 @@ import {
     Shuffle,
     Lock
 } from 'lucide-react';
+import HentaiGauge from '../components/HentaiGauge';
 import type { CardType } from '../types';
 import {
     createInitialRoomState,
@@ -25,6 +26,7 @@ import {
     addNpc,
     removeNpc,
     updatePlayerColor,
+    updatePlayerName,
     PLAYER_COLORS,
     type LocalRoomState
 } from '../store/gameStore';
@@ -78,6 +80,8 @@ export default function LobbyScreen() {
     const navigate = useNavigate();
     const [roomState, setRoomState] = useState<LocalRoomState | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [editingNpcId, setEditingNpcId] = useState<string | null>(null);
+    const [editingName, setEditingName] = useState('');
 
     // 初期化
     useEffect(() => {
@@ -138,6 +142,28 @@ export default function LobbyScreen() {
     // 退出
     const handleLeave = () => {
         navigate('/');
+    };
+
+    // NPC名編集開始
+    const handleStartEditNpcName = (playerId: string, currentName: string) => {
+        setEditingNpcId(playerId);
+        setEditingName(currentName);
+    };
+
+    // NPC名編集確定
+    const handleConfirmNpcName = () => {
+        if (roomState && editingNpcId && editingName.trim()) {
+            const newState = updatePlayerName(roomState, editingNpcId, editingName.trim());
+            setRoomState(newState);
+        }
+        setEditingNpcId(null);
+        setEditingName('');
+    };
+
+    // NPC名編集キャンセル
+    const handleCancelEditNpcName = () => {
+        setEditingNpcId(null);
+        setEditingName('');
     };
 
     // デッキ情報を計算
@@ -201,7 +227,6 @@ export default function LobbyScreen() {
     const randomPoolCards = useMemo(() => {
         if (!deckInfo || deckInfo.isFullDeck) return [];
 
-        const mandatoryTypes = new Set(deckInfo.mandatoryCards.map(c => c.type));
         const pool: { type: CardType; name: string; maxCount: number }[] = [];
 
         for (const [type, inventoryCount] of Object.entries(CARD_INVENTORY)) {
@@ -278,9 +303,41 @@ export default function LobbyScreen() {
                                             {index + 1}
                                         </div>
                                     )}
-                                    <span className="font-medium">{player.name}</span>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-2">
+                                            {player.isNpc && editingNpcId === player.id ? (
+                                                <input
+                                                    type="text"
+                                                    value={editingName}
+                                                    onChange={(e) => setEditingName(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleConfirmNpcName();
+                                                        if (e.key === 'Escape') handleCancelEditNpcName();
+                                                    }}
+                                                    onBlur={handleConfirmNpcName}
+                                                    autoFocus
+                                                    className="bg-white/10 border border-blue-500/50 rounded px-2 py-0.5 text-sm w-24 focus:outline-none focus:border-blue-400"
+                                                    maxLength={10}
+                                                />
+                                            ) : (
+                                                <span
+                                                    className={`font-medium ${player.isNpc ? 'cursor-pointer hover:text-blue-400 transition-colors' : ''}`}
+                                                    onClick={() => player.isNpc && handleStartEditNpcName(player.id, player.name)}
+                                                    title={player.isNpc ? 'クリックして名前を編集' : undefined}
+                                                >
+                                                    {player.name}
+                                                </span>
+                                            )}
+                                            <HentaiGauge level={player.hentaiLevel || 0} />
+                                        </div>
+                                        {player.currentPrefix && (
+                                            <span className="text-xs text-gray-400">
+                                                {player.currentPrefix}
+                                            </span>
+                                        )}
+                                    </div>
                                     {player.id === roomState.hostId && (
-                                        <span className="flex items-center gap-1 text-yellow-500 text-xs">
+                                        <span className="flex items-center gap-1 text-yellow-500 text-xs ml-2">
                                             <Crown className="w-4 h-4" />
                                             MASTER
                                         </span>
