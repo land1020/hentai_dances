@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ルーム情報
+    match /hentai_rooms/{roomId} {
+      // 誰でも読み取り可能（ルームに参加するため）
+      allow read: if true;
+      
+      // 誰でも作成可能（新規ルーム作成）
+      allow create: if true;
+      
+      // ルームのメンバーなら更新可能
+      allow update: if true;
+      
+      // ホストのみ削除可能（将来的に制限を追加）
+      allow delete: if true;
+    }
+    
+    // 殿堂入りデータ
+    match /hall_of_fame/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}
