@@ -11,6 +11,7 @@ import {
     updatePlayers,
     updateGameState,
     updateRoom,
+    updatePlayerColor,
     roomExists,
     generateRoomId,
     type OnlineRoomState
@@ -29,6 +30,7 @@ interface UseOnlineRoomResult {
     addNpc: (npc: Player) => Promise<void>;
     removeNpc: (npcId: string) => Promise<void>;
     updatePlayerName: (playerId: string, name: string) => Promise<void>;
+    updatePlayerColor: (playerId: string, color: string) => Promise<void>;
     startGame: (gameState: GameState) => Promise<void>;
     syncGameState: (gameState: GameState) => Promise<void>;
     enterRoom: (roomId: string, player: Player) => Promise<{ success: boolean; message?: string; isNewRoom?: boolean }>;
@@ -129,6 +131,13 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         await updatePlayers(roomId, newPlayers);
     }, [room, roomId]);
 
+    // プレイヤーカラー更新
+    const updatePlayerColorState = useCallback(async (playerId: string, color: string): Promise<void> => {
+        if (!room || !roomId) return;
+
+        await updatePlayerColor(roomId, playerId, color);
+    }, [room, roomId]);
+
     // ゲーム開始
     const startGame = useCallback(async (gameState: GameState): Promise<void> => {
         if (!roomId) return;
@@ -174,6 +183,7 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         addNpc,
         removeNpc,
         updatePlayerName,
+        updatePlayerColor: updatePlayerColorState,
         startGame,
         syncGameState,
         enterRoom,

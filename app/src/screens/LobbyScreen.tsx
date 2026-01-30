@@ -43,6 +43,7 @@ interface LobbyScreenProps {
     onRemoveNpc?: () => Promise<void>;
     onStartGame?: () => Promise<void>;
     onUpdatePlayerName?: (playerId: string, name: string) => Promise<void>;
+    onUpdatePlayerColor?: (playerId: string, color: string) => Promise<void>;
     onLeave?: () => void;
 }
 
@@ -95,6 +96,7 @@ export default function LobbyScreen({
     onRemoveNpc,
     onStartGame,
     onUpdatePlayerName,
+    onUpdatePlayerColor,
     onLeave
 }: LobbyScreenProps = {}) {
     const { roomId: paramRoomId } = useParams();
@@ -103,6 +105,7 @@ export default function LobbyScreen({
     const navigate = useNavigate();
     const [localRoomState, setLocalRoomState] = useState<LocalRoomState | null>(null);
     const roomState = isOnlineMode ? (onlineRoomState as any) : localRoomState;
+    const currentUserId = localStorage.getItem('hentai_user_id');
 
     const [isInitializing, setIsInitializing] = useState(true);
 
@@ -323,7 +326,7 @@ export default function LobbyScreen({
                         </div>
                     </div>
                     <div className="text-right">
-                        <div className="text-sm text-yellow-500">🔧 ローカルモード</div>
+                        {/* ローカルモード表記削除 */}
                     </div>
                 </div>
 
@@ -338,16 +341,23 @@ export default function LobbyScreen({
                         {roomState.players.map((player: Player, index: number) => (
                             <div
                                 key={player.id}
-                                className={`flex items-center justify-between p-3 rounded-lg ${player.isNpc
-                                    ? 'bg-blue-500/10 border border-blue-500/30'
-                                    : 'bg-purple-500/10 border border-purple-500/30'
+                                className={`flex items-center justify-between p-3 rounded-lg border ${player.isNpc
+                                    ? 'bg-blue-500/10 border-blue-500/30'
+                                    : ''
                                     }`}
+                                style={!player.isNpc ? {
+                                    backgroundColor: `${player.color}20`, // 20 = ~12% opacity
+                                    borderColor: `${player.color}50`      // 50 = ~30% opacity
+                                } : undefined}
                             >
                                 <div className="flex items-center gap-3">
                                     {player.isNpc ? (
                                         <Bot className="w-6 h-6 text-blue-400" />
                                     ) : (
-                                        <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-sm font-bold">
+                                        <div
+                                            className="w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold text-white shadow-sm"
+                                            style={{ backgroundColor: player.color }}
+                                        >
                                             {index + 1}
                                         </div>
                                     )}
@@ -398,8 +408,8 @@ export default function LobbyScreen({
                         ))}
                     </div>
 
-                    {/* NPC管理（デバッグモード） */}
-                    {roomState.debugMode && (
+                    {/* NPC管理（ホストのみ、またはローカルモード） */}
+                    {(!isOnlineMode || (roomState.hostId === currentUserId)) && (
                         <div className="mt-4 pt-4 border-t border-white/10">
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-gray-400">
@@ -442,17 +452,24 @@ export default function LobbyScreen({
                             return (
                                 <button
                                     key={color}
-                                    onClick={() => {
-                                        if (!isOnlineMode && localRoomState) {
+                                    onClick={async () => {
+                                        if (isOnlineMode) {
+                                            if (onUpdatePlayerColor) {
+                                                const userId = localStorage.getItem('hentai_user_id');
+                                                if (userId) {
+                                                    await onUpdatePlayerColor(userId, color);
+                                                }
+                                            }
+                                        } else if (localRoomState) {
                                             const newState = updatePlayerColor(localRoomState, localRoomState.hostId, color);
                                             setLocalRoomState(newState);
                                         }
                                     }}
-                                    disabled={isTaken || isOnlineMode}
+                                    disabled={isTaken}
                                     className={`
                                         w-10 h-10 rounded-full transition-all flex items-center justify-center
                                         ${isSelected ? 'ring-4 ring-white scale-110' : 'hover:scale-110'}
-                                        ${isTaken || isOnlineMode ? 'opacity-30 cursor-not-allowed ring-2 ring-gray-500' : ''}
+                                        ${isTaken ? 'opacity-30 cursor-not-allowed is-taken ring-2 ring-gray-500' : ''}
                                     `}
                                     style={{ backgroundColor: color }}
                                 >

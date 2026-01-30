@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ArrestAnimationInfo, CardType, Player } from '../types';
 import { CARD_DEFINITIONS } from '../data/cards';
-import arrestImage from '../assets/変態逮捕.png';
+const arrestImage = '/images/arrest.png';
 
 interface ArrestAnimationOverlayProps {
     animationInfo: ArrestAnimationInfo | null | undefined;
@@ -154,8 +154,8 @@ export default function ArrestAnimationOverlay({
                             {/* カード表面 */}
                             <div
                                 className={`absolute inset-0 rounded-xl border-4 flex flex-col items-center justify-center p-4 ${displayCardType === 'culprit'
-                                        ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-yellow-400'
-                                        : 'bg-gradient-to-br from-gray-600 to-gray-800 border-white/30'
+                                    ? 'bg-gradient-to-br from-purple-600 to-pink-600 border-yellow-400'
+                                    : 'bg-gradient-to-br from-gray-600 to-gray-800 border-white/30'
                                     }`}
                                 style={{
                                     backfaceVisibility: 'hidden',

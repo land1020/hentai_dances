@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { CulpritVictoryAnimationInfo, Player } from '../types';
 import { CARD_DEFINITIONS } from '../data/cards';
-import culpritVictoryImage from '../assets/変態勝利.jpg';
+const culpritVictoryImage = '/images/culprit_win.jpg';
 
 interface CulpritVictoryAnimationOverlayProps {
     animationInfo: CulpritVictoryAnimationInfo | null | undefined;

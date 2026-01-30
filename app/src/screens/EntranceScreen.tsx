@@ -5,12 +5,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Wrench, Trophy, RefreshCw, Wifi, WifiOff } from 'lucide-react';
-import { loadRoomState, clearRoomState } from '../store/gameStore';
 import {
     createRoom,
     joinRoom,
-    roomExists
+    getRoom,
+    deleteRoom
 } from '../services/roomService';
+import { loadRoomState, clearRoomState, PLAYER_COLORS } from '../store/gameStore';
 import { getOrCreateUserId, setPlayerName } from '../hooks/useOnlineRoom';
 import type { Player } from '../types';
 
@@ -55,6 +56,26 @@ export default function EntranceScreen() {
             const userId = getOrCreateUserId();
             setPlayerName(name.trim());
 
+            // 存在確認とカラー選択
+            const room = await getRoom(roomId);
+
+            // カラー決定ロジック
+            let selectedColor = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
+
+            if (room) {
+                // 既に使用されているカラーを除外
+                const usedColors = room.players.map(p => p.color);
+                const availableColors = PLAYER_COLORS.filter(c => !usedColors.includes(c));
+
+                if (availableColors.length > 0) {
+                    // 空いている色からランダムに選択
+                    selectedColor = availableColors[Math.floor(Math.random() * availableColors.length)];
+                } else {
+                    // 全色埋まっている場合はランダム (重複許容)
+                    selectedColor = PLAYER_COLORS[Math.floor(Math.random() * PLAYER_COLORS.length)];
+                }
+            }
+
             const player: Player = {
                 id: userId,
                 name: name.trim(),
@@ -67,13 +88,10 @@ export default function EntranceScreen() {
                 assignedWord: null,
                 isCursed: false,
                 cursedPrefix: null,
-                color: '#8B5CF6',
+                color: selectedColor,
             };
 
-            // 存在確認
-            const exists = await roomExists(roomId);
-
-            if (exists) {
+            if (room) {
                 // 参加
                 const success = await joinRoom(roomId, player);
                 if (!success) {
@@ -136,7 +154,7 @@ export default function EntranceScreen() {
     };
 
     // ルーム情報リセット
-    const handleReset = () => {
+    const handleReset = async () => {
         if (!roomId.match(/^\d{4}$/)) {
             setError('リセットしたい部屋番号（4桁）を入力欄に入力してください');
             return;
@@ -146,6 +164,26 @@ export default function EntranceScreen() {
             return;
         }
 
+        // オンラインモードの場合
+        if (gameMode === 'online') {
+            try {
+                await deleteRoom(roomId);
+                // 関連するローカルストレージもクリア
+                localStorage.removeItem('hentai_room_id');
+                if (localStorage.getItem('hentai_game_mode') === 'online') {
+                    localStorage.removeItem('hentai_game_mode');
+                }
+                alert(`オンラインルーム ${roomId} をリセット（削除）しました。`);
+                setRoomId('');
+                window.location.reload();
+            } catch (err) {
+                console.error('リセットエラー:', err);
+                setError('ルームの削除に失敗しました。もう一度お試しください。');
+            }
+            return;
+        }
+
+        // ローカルモードの場合（既存ロジック）
         const savedState = loadRoomState();
 
         if (savedState && savedState.roomId === roomId) {
@@ -155,7 +193,13 @@ export default function EntranceScreen() {
             setRoomId('');
             window.location.reload();
         } else if (!savedState) {
-            setError('保存されているルーム情報はありません。');
+            // ローカルにデータがない場合でも、強制的に画面リロードを促すか、あるいは何もしない
+            // ユーザーが「リセットしたい」と言っているのに「データがない」と言われると混乱するので
+            // ここはメッセージを少しマイルドにするか、念のためonline削除も試みる手があるが、
+            // UI上モードが分かれているので、モードに従う。
+
+            // ローカルモード画面で押されたなら、ローカルデータの不在を伝える
+            setError('この端末に保存されているローカルルーム情報はありません。');
         } else {
             setError(`入力された部屋番号と保存データの部屋番号が一致しません。\n(保存されている部屋: ${savedState.roomId})`);
         }

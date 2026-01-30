@@ -129,6 +129,25 @@ export async function joinRoom(roomId: string, player: Player): Promise<boolean>
 }
 
 /**
+ * プレイヤーのカラーを更新
+ */
+export async function updatePlayerColor(roomId: string, playerId: string, color: string): Promise<void> {
+    const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+    const snapshot = await getDoc(roomRef);
+
+    if (!snapshot.exists()) {
+        return;
+    }
+
+    const data = snapshot.data() as RoomDocument;
+    const newPlayers = data.players.map(p =>
+        p.id === playerId ? { ...p, color } : p
+    );
+
+    await updateDoc(roomRef, { players: newPlayers });
+}
+
+/**
  * ルームからプレイヤーを削除（退出）
  */
 export async function leaveRoom(roomId: string, playerId: string): Promise<void> {
@@ -241,4 +260,12 @@ export function generateRoomId(): string {
         result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return result;
+}
+
+/**
+ * ルームを強制削除（リセット用）
+ */
+export async function deleteRoom(roomId: string): Promise<void> {
+    const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+    await deleteDoc(roomRef);
 }

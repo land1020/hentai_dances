@@ -24,6 +24,7 @@ export default function OnlineLobbyScreen() {
         addNpc,
         removeNpc,
         updatePlayerName,
+        updatePlayerColor,
         startGame,
         leaveCurrentRoom
     } = useOnlineRoom(roomId || null);
@@ -118,6 +119,7 @@ export default function OnlineLobbyScreen() {
             onRemoveNpc={handleRemoveNpc}
             onStartGame={handleStartGame}
             onUpdatePlayerName={updatePlayerName}
+            onUpdatePlayerColor={updatePlayerColor}
             onLeave={handleLeave}
         />
     );
