@@ -399,12 +399,37 @@ function PlayerMat({
     );
 }
 
-export default function GamePlayScreen() {
+// オンライン用のProps型定義
+interface GamePlayScreenProps {
+    isOnlineMode?: boolean;
+    onlineRoomId?: string;
+    onlineUserId?: string;
+    initialGameState?: GameState | null;
+    onGameStateChange?: (newState: GameState) => Promise<void>;
+    isHost?: boolean;
+}
+
+export default function GamePlayScreen({
+    isOnlineMode = false,
+    onlineRoomId,
+    onlineUserId,
+    initialGameState,
+    onGameStateChange,
+    isHost = true // ローカルモードではデフォルトでホスト
+}: GamePlayScreenProps = {}) {
     const { roomId } = useParams();
     const navigate = useNavigate();
 
     const [roomState, setRoomState] = useState<LocalRoomState | null>(null);
-    const [gameState, setGameState] = useState<GameState | null>(null);
+    // 初期状態をPropsから受け取る（オンライン時）か、nullで開始（ローカル時）
+    const [gameState, setGameStateRaw] = useState<GameState | null>(initialGameState || null);
+
+    // オンライン状態で外部から更新があった場合に同期する
+    useEffect(() => {
+        if (isOnlineMode && initialGameState) {
+            setGameStateRaw(initialGameState);
+        }
+    }, [isOnlineMode, initialGameState]);
     const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
     const [showCulpritInfo, setShowCulpritInfo] = useState(false);
     const [showWitnessInfo, setShowWitnessInfo] = useState<string | null>(null); // 目撃者で見た相手のID
@@ -441,6 +466,40 @@ export default function GamePlayScreen() {
         out: { card: Card, toPlayerId: string } | null;
     }>({ in: null, out: null });
 
+    // wrapper for setGameState to handle online sync
+    const setGameState = async (newStateOrUpdater: GameState | ((prev: GameState | null) => GameState | null) | null) => {
+        if (newStateOrUpdater === null) {
+            setGameStateRaw(null);
+            return;
+        }
+
+        let newState: GameState | null;
+        if (typeof newStateOrUpdater === 'function') {
+            newState = newStateOrUpdater(gameState);
+        } else {
+            newState = newStateOrUpdater;
+        }
+
+        if (!newState) {
+            // nullにする場合
+            setGameStateRaw(null);
+            return;
+        }
+
+        setGameStateRaw(newState);
+
+        if (isOnlineMode && onGameStateChange) {
+            await onGameStateChange(newState);
+        }
+    };
+
+    // 既存のuseEffectとの競合を避けるため、ローカル保存ロジックもここに統合するのが理想的だが、
+    // 既存のuseEffect (507行目) が roomState と gameState の両方を監視しているので、
+    // そちらを利用するほうが安全かもしれない。
+
+    // しかし、オンライン同期は明示的に行いたい。
+
+
     // 詳細表示中のカード
     const [detailedCardInfo, setDetailedCardInfo] = useState<{ card: Card, isPlayable: boolean } | null>(null);
 
@@ -450,6 +509,9 @@ export default function GamePlayScreen() {
 
     // 初期化
     useEffect(() => {
+        // オンラインモードなら初期ロード処理はスキップ
+        if (isOnlineMode) return;
+
         if (!roomId) {
             navigate('/');
             return;
@@ -477,13 +539,13 @@ export default function GamePlayScreen() {
         }
     }, [roomId, navigate]);
 
-    // ゲーム状態が変わったら保存
+    // ゲーム状態が変わったら保存（ローカルモードのみ）
     useEffect(() => {
-        if (roomState && gameState) {
+        if (!isOnlineMode && roomState && gameState) {
             const updatedRoom = { ...roomState, gameState };
             saveRoomState(updatedRoom);
         }
-    }, [gameState]);
+    }, [gameState, isOnlineMode]);
 
     // フェーズを自動で進める
     useEffect(() => {
@@ -539,6 +601,9 @@ export default function GamePlayScreen() {
     useEffect(() => {
         if (!gameState || gameState.phase !== GamePhase.WAITING_FOR_PLAY) return;
 
+        // オンラインモードの場合、ホスト以外はNPCを操作しない
+        if (isOnlineMode && !isHost) return;
+
         const activePlayer = gameState.players[gameState.activePlayerIndex];
         if (!activePlayer.isNpc) return;
 
@@ -565,6 +630,9 @@ export default function GamePlayScreen() {
     useEffect(() => {
         if (!gameState || gameState.phase !== GamePhase.SELECTING_TARGET) return;
         if (!gameState.pendingAction) return;
+
+        // オンラインモードの場合、ホスト以外はNPCを操作しない
+        if (isOnlineMode && !isHost) return;
 
         const sourcePlayer = gameState.players.find(p => p.id === gameState.pendingAction!.playerId);
         if (!sourcePlayer?.isNpc) return;
@@ -1517,6 +1585,7 @@ export default function GamePlayScreen() {
 
         </div >
     );
+
 }
 
 // カード交換アニメーション
