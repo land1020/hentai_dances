@@ -18,7 +18,7 @@ import {
     Lock
 } from 'lucide-react';
 import HentaiGauge from '../components/HentaiGauge';
-import type { CardType } from '../types';
+import type { CardType, Player } from '../types';
 import {
     createInitialRoomState,
     loadRoomState,
@@ -33,6 +33,18 @@ import {
 import { CARD_DEFINITIONS } from '../data/cards';
 import { CARD_INVENTORY } from '../utils/deckFactory';
 import { initializeGame } from '../engine/GameEngine';
+import type { OnlineRoomState } from '../services/roomService';
+
+interface LobbyScreenProps {
+    isOnlineMode?: boolean;
+    onlineRoomId?: string;
+    onlineRoomState?: OnlineRoomState | null;
+    onAddNpc?: () => Promise<void>;
+    onRemoveNpc?: () => Promise<void>;
+    onStartGame?: () => Promise<void>;
+    onUpdatePlayerName?: (playerId: string, name: string) => Promise<void>;
+    onLeave?: () => void;
+}
 
 // 参加人数ごとの必須カード構成
 const MANDATORY_CARDS_CONFIG: Record<number, Partial<Record<CardType, number>>> = {
@@ -75,16 +87,34 @@ const MANDATORY_CARDS_CONFIG: Record<number, Partial<Record<CardType, number>>> 
     },
 };
 
-export default function LobbyScreen() {
-    const { roomId } = useParams();
+export default function LobbyScreen({
+    isOnlineMode = false,
+    onlineRoomId,
+    onlineRoomState,
+    onAddNpc,
+    onRemoveNpc,
+    onStartGame,
+    onUpdatePlayerName,
+    onLeave
+}: LobbyScreenProps = {}) {
+    const { roomId: paramRoomId } = useParams();
+    const roomId = isOnlineMode ? onlineRoomId : paramRoomId;
+
     const navigate = useNavigate();
-    const [roomState, setRoomState] = useState<LocalRoomState | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [localRoomState, setLocalRoomState] = useState<LocalRoomState | null>(null);
+    const roomState = isOnlineMode ? (onlineRoomState as any) : localRoomState;
+
+    const [isInitializing, setIsInitializing] = useState(true);
+
+    const isLoading = isOnlineMode ? !onlineRoomState : isInitializing;
     const [editingNpcId, setEditingNpcId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
 
     // 初期化
+    // 初期化（ローカルモードのみ）
     useEffect(() => {
+        if (isOnlineMode) return;
+
         if (!roomId) {
             navigate('/');
             return;
@@ -101,47 +131,60 @@ export default function LobbyScreen() {
             saveRoomState(state);
         }
 
-        setRoomState(state);
-        setIsLoading(false);
-    }, [roomId, navigate]);
+        setLocalRoomState(state);
+        setIsInitializing(false);
+    }, [roomId, navigate, isOnlineMode]);
 
     // NPC追加
-    const handleAddNpc = () => {
-        if (roomState) {
-            const newState = addNpc(roomState);
-            setRoomState(newState);
+    // NPC追加
+    const handleAddNpc = async () => {
+        if (isOnlineMode) {
+            if (onAddNpc) await onAddNpc();
+        } else if (localRoomState) {
+            const newState = addNpc(localRoomState);
+            setLocalRoomState(newState);
         }
     };
 
     // NPC削除
-    const handleRemoveNpc = () => {
-        if (roomState) {
-            const newState = removeNpc(roomState);
-            setRoomState(newState);
+    // NPC削除
+    const handleRemoveNpc = async () => {
+        if (isOnlineMode) {
+            if (onRemoveNpc) await onRemoveNpc();
+        } else if (localRoomState) {
+            const newState = removeNpc(localRoomState);
+            setLocalRoomState(newState);
         }
     };
 
     // ゲーム開始
-    const handleStartGame = () => {
-        if (roomState) {
+    // ゲーム開始
+    const handleStartGame = async () => {
+        if (isOnlineMode) {
+            if (onStartGame) await onStartGame();
+        } else if (localRoomState) {
             // ゲームを初期化（カードを配布）
-            const gameState = initializeGame(roomState.players);
+            const gameState = initializeGame(localRoomState.players);
 
             const newState: LocalRoomState = {
-                ...roomState,
+                ...localRoomState,
                 status: 'PLAYING',
                 gameState,
             };
 
             saveRoomState(newState);
-            setRoomState(newState);
+            setLocalRoomState(newState);
             navigate(`/game/${roomId}`);
         }
     };
 
     // 退出
     const handleLeave = () => {
-        navigate('/');
+        if (onLeave) {
+            onLeave();
+        } else {
+            navigate('/');
+        }
     };
 
     // NPC名編集開始
@@ -151,10 +194,15 @@ export default function LobbyScreen() {
     };
 
     // NPC名編集確定
-    const handleConfirmNpcName = () => {
-        if (roomState && editingNpcId && editingName.trim()) {
-            const newState = updatePlayerName(roomState, editingNpcId, editingName.trim());
-            setRoomState(newState);
+    // NPC名編集確定
+    const handleConfirmNpcName = async () => {
+        if (editingNpcId && editingName.trim()) {
+            if (isOnlineMode) {
+                if (onUpdatePlayerName) await onUpdatePlayerName(editingNpcId, editingName.trim());
+            } else if (localRoomState) {
+                const newState = updatePlayerName(localRoomState, editingNpcId, editingName.trim());
+                setLocalRoomState(newState);
+            }
         }
         setEditingNpcId(null);
         setEditingName('');
@@ -287,7 +335,7 @@ export default function LobbyScreen() {
                     </div>
 
                     <div className="space-y-2">
-                        {roomState.players.map((player, index) => (
+                        {roomState.players.map((player: Player, index: number) => (
                             <div
                                 key={player.id}
                                 className={`flex items-center justify-between p-3 rounded-lg ${player.isNpc
@@ -388,23 +436,23 @@ export default function LobbyScreen() {
                     </div>
                     <div className="flex gap-3 flex-wrap justify-center">
                         {PLAYER_COLORS.map((color) => {
-                            const isSelected = roomState.players.find(p => p.id === roomState.hostId)?.color === color;
-                            const isTaken = roomState.players.some(p => p.color === color && p.id !== roomState.hostId);
+                            const isSelected = roomState.players.find((p: Player) => p.id === roomState.hostId)?.color === color;
+                            const isTaken = roomState.players.some((p: Player) => p.color === color && p.id !== roomState.hostId);
 
                             return (
                                 <button
                                     key={color}
                                     onClick={() => {
-                                        if (roomState) {
-                                            const newState = updatePlayerColor(roomState, roomState.hostId, color);
-                                            setRoomState(newState);
+                                        if (!isOnlineMode && localRoomState) {
+                                            const newState = updatePlayerColor(localRoomState, localRoomState.hostId, color);
+                                            setLocalRoomState(newState);
                                         }
                                     }}
-                                    disabled={isTaken}
+                                    disabled={isTaken || isOnlineMode}
                                     className={`
                                         w-10 h-10 rounded-full transition-all flex items-center justify-center
                                         ${isSelected ? 'ring-4 ring-white scale-110' : 'hover:scale-110'}
-                                        ${isTaken ? 'opacity-30 cursor-not-allowed ring-2 ring-gray-500' : ''}
+                                        ${isTaken || isOnlineMode ? 'opacity-30 cursor-not-allowed ring-2 ring-gray-500' : ''}
                                     `}
                                     style={{ backgroundColor: color }}
                                 >
