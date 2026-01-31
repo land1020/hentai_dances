@@ -12,6 +12,7 @@ import {
     updateGameState,
     updateRoom,
     updatePlayerColor,
+    submitCardSelectionTransaction,
     roomExists,
     generateRoomId,
     type OnlineRoomState
@@ -34,6 +35,7 @@ interface UseOnlineRoomResult {
     startGame: (gameState: GameState) => Promise<void>;
     syncGameState: (gameState: GameState) => Promise<void>;
     enterRoom: (roomId: string, player: Player) => Promise<{ success: boolean; message?: string; isNewRoom?: boolean }>;
+    submitCardSelection: (playerId: string, cardId: string) => Promise<void>;
 }
 
 export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
@@ -172,6 +174,12 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         }
     }, []);
 
+    // カード選択を送信（競合対策付き）
+    const submitCardSelection = useCallback(async (playerId: string, cardId: string): Promise<void> => {
+        if (!roomId) return;
+        await submitCardSelectionTransaction(roomId, playerId, cardId);
+    }, [roomId]);
+
     return {
         room,
         isLoading,
@@ -187,6 +195,7 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         startGame,
         syncGameState,
         enterRoom,
+        submitCardSelection,
     };
 }
 

@@ -26,6 +26,7 @@ import {
     saveRoomState,
     type LocalRoomState
 } from '../store/gameStore';
+import { submitCardSelectionTransaction } from '../services/roomService'; // Import transaction function
 import { initializeGame, advancePhase, playCard, canPlayCard, selectTarget, getCulpritPlayer, selectCard, submitExchangeCard, completeArrestAnimation, completeCulpritVictoryAnimation } from '../engine/GameEngine';
 import ArrestAnimationOverlay from '../components/ArrestAnimationOverlay';
 import CulpritVictoryAnimationOverlay from '../components/CulpritVictoryAnimationOverlay';
@@ -732,16 +733,29 @@ export default function GamePlayScreen({
 
 
     // カード交換（情報操作）
-    const handleExchangeCard = (cardId: string) => {
+    const handleExchangeCard = async (cardId: string) => {
         if (!gameState || !myPlayer) return;
-        const newState = submitExchangeCard(gameState, myPlayer.id, cardId);
-        setGameState(newState);
 
-        // 交換が完了したかチェック（フェーズが進んだか）
-        if (newState.phase === GamePhase.RESOLVING_EFFECT) {
-            setMessage('カード交換が実行されました！');
+        if (isOnlineMode && roomId) {
+            // オンラインモード: トランザクション処理で自身の選択のみを送信
+            try {
+                await submitCardSelectionTransaction(roomId, myPlayer.id, cardId);
+                setMessage('カードを選択しました。他のプレイヤーを待っています...');
+            } catch (error) {
+                console.error("Exchange Error:", error);
+                setMessage('通信エラーが発生しました。もう一度試してください。');
+            }
         } else {
-            setMessage('カードを選択しました。他のプレイヤーを待っています...');
+            // ローカルモード: 即座に反映
+            const newState = submitExchangeCard(gameState, myPlayer.id, cardId);
+            setGameState(newState);
+
+            // 交換が完了したかチェック（フェーズが進んだか）
+            if (newState.phase === GamePhase.RESOLVING_EFFECT) {
+                setMessage('カード交換が実行されました！');
+            } else {
+                setMessage('カードを選択しました。他のプレイヤーを待っています...');
+            }
         }
     };
 

@@ -10,6 +10,7 @@ import {
     onSnapshot,
     serverTimestamp,
     deleteDoc,
+    runTransaction,
 } from 'firebase/firestore';
 import type { Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -194,6 +195,52 @@ export async function updatePlayers(roomId: string, players: Player[]): Promise<
 export async function updateGameState(roomId: string, gameState: GameState): Promise<void> {
     const roomRef = doc(db, ROOMS_COLLECTION, roomId);
     await updateDoc(roomRef, { gameState });
+}
+
+/**
+ * カード選択を送信（トランザクション処理）
+ * 同時更新による上書きを防ぐため、現在のServer状態に対して自分の選択だけをマージする
+ */
+export async function submitCardSelectionTransaction(
+    roomId: string,
+    playerId: string,
+    cardId: string
+): Promise<void> {
+    const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+
+    await runTransaction(db, async (transaction) => {
+        const roomDoc = await transaction.get(roomRef);
+        if (!roomDoc.exists()) {
+            throw new Error("Room does not exist!");
+        }
+
+        const data = roomDoc.data() as RoomDocument;
+        const currentGameState = data.gameState;
+
+        if (!currentGameState || !currentGameState.exchangeState) {
+            // 交換フェーズでない、または状態がおかしい場合は何もしない（あるいはエラー）
+            return;
+        }
+
+        // 既存の選択状態を維持しつつ、自分の選択を追加
+        const newSelections = {
+            ...currentGameState.exchangeState.selections,
+            [playerId]: cardId
+        };
+
+        const newExchangeState = {
+            ...currentGameState.exchangeState,
+            selections: newSelections
+        };
+
+        // gameStateを更新（exchangeStateのみ書き換え）
+        const newGameState = {
+            ...currentGameState,
+            exchangeState: newExchangeState
+        };
+
+        transaction.update(roomRef, { gameState: newGameState });
+    });
 }
 
 /**
