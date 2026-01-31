@@ -1009,10 +1009,10 @@ export default function GamePlayScreen({
             </div>
 
             {/* 中央: 左プレイヤー / メイン画面 / 右プレイヤー */}
-            <div className="flex-1 flex flex-col md:flex-row items-center md:items-stretch px-2 gap-4 md:gap-2 min-h-0 overflow-y-auto md:overflow-visible scrollbar-hide py-2">
+            <div className="flex-1 flex flex-row items-center justify-start md:justify-center px-4 gap-4 overflow-x-auto scrollbar-hide py-2 w-full snap-x snap-mandatory">
 
                 {/* 左側プレイヤー（次のプレイヤー） */}
-                <div className="w-full md:w-[280px] flex-shrink-0 flex items-center justify-center order-2 md:order-none">
+                <div className="min-w-[85vw] md:min-w-[280px] md:w-[280px] flex-shrink-0 flex items-center justify-center order-1 snap-center">
                     {gameState.players.map((p, i) => {
                         if (getRelativePosition(i) === 'left') {
                             return (
@@ -1033,7 +1033,7 @@ export default function GamePlayScreen({
                 </div>
 
                 {/* メイン画面（中央） */}
-                <div className="w-full md:flex-1 flex items-center justify-center py-2 md:py-0 order-1 md:order-none">
+                <div className="min-w-[90vw] md:min-w-[400px] md:flex-1 flex items-center justify-center py-0 order-2 snap-center">
                     <div className="w-full max-w-md aspect-[16/10] bg-yellow-400 rounded-2xl shadow-[0_0_40px_rgba(250,204,21,0.3)] flex flex-col items-center justify-center p-4 border-b-8 border-yellow-500 relative overflow-hidden">
                         {/* 背景パターン */}
                         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px]" />
@@ -1065,7 +1065,7 @@ export default function GamePlayScreen({
                 </div>
 
                 {/* 右側プレイヤー（最後のプレイヤー） */}
-                <div className="w-full md:w-[280px] flex-shrink-0 flex items-center justify-center order-3 md:order-none">
+                <div className="min-w-[85vw] md:min-w-[280px] md:w-[280px] flex-shrink-0 flex items-center justify-center order-3 snap-center">
                     {gameState.players.map((p, i) => {
                         if (getRelativePosition(i) === 'right') {
                             return (
@@ -1087,7 +1087,7 @@ export default function GamePlayScreen({
             </div>
 
             {/* 自分（下部固定） */}{/* MyPlayerMatをPlayerMatのデザインに合わせるが、操作性を維持 */}
-            <div className="relative z-30 pb-4 px-4 flex justify-center">
+            <div className="relative z-30 pb-2 px-2 flex justify-center -mt-2">
                 <motion.div
                     className={`
                         relative rounded-xl overflow-visible shadow-2xl border-4 transition-all w-full max-w-2xl
