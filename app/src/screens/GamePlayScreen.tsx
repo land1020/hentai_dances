@@ -295,17 +295,16 @@ function PlayerMat({
                 className="px-3 py-1.5 flex items-center justify-between text-white shadow-sm border-b border-white/20"
                 style={{ backgroundColor: player.color || '#6B7280' }}
             >
-                <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
-                    {/* 性癖 */}
-                    <div className="flex-shrink-0 max-w-[70%] flex">
-                        <span className="bg-black/20 px-1.5 py-0.5 rounded text-xs truncate block">
+                <div className="flex items-center gap-0 overflow-hidden flex-1 min-w-0">
+                    {/* 性癖と名前をまとめて背景表示 */}
+                    <div className="flex items-center bg-black/30 rounded overflow-hidden">
+                        <span className="px-1.5 py-0.5 text-xs truncate border-r border-white/20">
                             {player.currentPrefix || '???'}
                         </span>
+                        <span className="px-1.5 py-0.5 truncate font-bold text-sm">
+                            {player.name}
+                        </span>
                     </div>
-                    {/* 名前 */}
-                    <span className="bg-black/30 px-1.5 py-0.5 rounded truncate font-bold text-sm flex-1">
-                        {player.name}
-                    </span>
                 </div>
 
 
@@ -1120,11 +1119,14 @@ export default function GamePlayScreen({
                     <div className="px-4 py-2 flex items-center justify-between text-white shadow-sm border-b border-white/20">
                         <div className="flex items-center gap-3 overflow-hidden w-full">
                             <User className="w-6 h-6 opacity-90" />
-                            <div className="flex items-center gap-2 font-bold text-lg truncate flex-1">
-                                <span className="bg-black/20 px-3 py-0.5 rounded text-base">
+                            {/* 性癖と名前をまとめて背景表示 */}
+                            <div className="flex items-center bg-black/30 rounded overflow-hidden">
+                                <span className="px-3 py-0.5 text-base border-r border-white/20">
                                     {myPlayer.currentPrefix || '???'}
                                 </span>
-                                <span className="bg-black/30 px-3 py-0.5 rounded truncate text-xl">{myPlayer.name}</span>
+                                <span className="px-3 py-0.5 truncate text-xl">
+                                    {myPlayer.name}
+                                </span>
                             </div>
                         </div>
                     </div>
