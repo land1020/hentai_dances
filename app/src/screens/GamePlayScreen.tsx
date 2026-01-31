@@ -600,7 +600,45 @@ export default function GamePlayScreen({
             }, 500);
             return () => clearTimeout(timer);
         }
-    }, [gameState?.phase]);
+
+        // オンライン対応: 全員交換選択完了時の自動実行（ホストのみ）
+        if (gameState.phase === GamePhase.EXCHANGE_PHASE && gameState.exchangeState) {
+            const alivePlayers = gameState.players.filter(p => p.isAlive);
+            let isAllReady = false;
+
+            if (gameState.exchangeState.type === 'TRADE' && gameState.exchangeState.targetIds) {
+                isAllReady = gameState.exchangeState.targetIds.every(id => {
+                    const p = gameState.players.find(pl => pl.id === id);
+                    return !p || p.hand.length === 0 || !!gameState.exchangeState!.selections[id];
+                });
+            } else {
+                // INFORMATION / RUMOR
+                isAllReady = alivePlayers.every(p =>
+                    p.hand.length === 0 || !!gameState.exchangeState!.selections[p.id]
+                );
+            }
+
+            if (isAllReady) {
+                const timer = setTimeout(() => {
+                    // 実行トリガーとして、既に選択済みの誰かのデータを使ってsubmitExchangeCardを呼ぶ
+                    const firstSelectorId = Object.keys(gameState.exchangeState!.selections)[0];
+                    if (firstSelectorId) {
+                        const cardId = gameState.exchangeState!.selections[firstSelectorId];
+                        const newState = submitExchangeCard(gameState, firstSelectorId, cardId);
+                        setGameState(newState);
+                        setMessage(gameState.exchangeState!.type === 'TRADE' ? '取り引き成立！' : '情報操作を実行しました！');
+                    } else if (alivePlayers.every(p => p.hand.length === 0)) {
+                        // 全員手札なしの場合の進行（レアケース）
+                        // 手札なしでも進行できるロジックが必要だが、現状はselectionがないと進まない可能性がある
+                        // この場合は強制的にGameEngine側でempty処理を通す必要があるが、
+                        // submitExchangeCardはcardId必須。
+                        // ここは一旦手札あり前提で実装。
+                    }
+                }, 1000);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [gameState?.phase, gameState?.exchangeState]); // exchangeStateの変化も監視対象に追加
 
     // NPC自動行動
     useEffect(() => {
