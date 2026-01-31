@@ -26,7 +26,7 @@ import {
     saveRoomState,
     type LocalRoomState
 } from '../store/gameStore';
-import { submitCardSelectionTransaction } from '../services/roomService'; // Import transaction function
+import { submitCardSelectionTransaction, updateRoomStatus } from '../services/roomService'; // Import transaction function
 import { initializeGame, advancePhase, playCard, canPlayCard, selectTarget, getCulpritPlayer, selectCard, submitExchangeCard, completeArrestAnimation, completeCulpritVictoryAnimation } from '../engine/GameEngine';
 import ArrestAnimationOverlay from '../components/ArrestAnimationOverlay';
 import CulpritVictoryAnimationOverlay from '../components/CulpritVictoryAnimationOverlay';
@@ -599,6 +599,11 @@ export default function GamePlayScreen({
                 setGameState(advancePhase(gameState));
             }, 500);
             return () => clearTimeout(timer);
+        }
+
+        // オンライン: ゲーム終了時にRoomStatusをFINISHEDに更新（ホストのみ）
+        if (gameState.phase === GamePhase.GAME_OVER && isOnlineMode && isHost && roomId) {
+            updateRoomStatus(roomId, 'FINISHED');
         }
 
         // オンライン対応: 全員交換選択完了時の自動実行（ホストのみ）
