@@ -446,13 +446,31 @@ export default function LobbyScreen({
                     </div>
                     <div className="flex gap-3 flex-wrap justify-center">
                         {PLAYER_COLORS.map((color) => {
-                            const isSelected = roomState.players.find((p: Player) => p.id === roomState.hostId)?.color === color;
-                            const isTaken = roomState.players.some((p: Player) => p.color === color && p.id !== roomState.hostId);
+                            // 現在のユーザーID（オンラインモードではlocalStorage、ローカルモードではhostId）
+                            const myPlayerId = isOnlineMode
+                                ? localStorage.getItem('hentai_user_id')
+                                : localRoomState?.hostId;
+
+                            // 自分がこのカラーを選択しているか
+                            const isSelected = roomState.players.find((p: Player) => p.id === myPlayerId)?.color === color;
+
+                            // このカラーを使用しているプレイヤー（自分以外）
+                            const takenByPlayer = roomState.players.find((p: Player) => p.color === color && p.id !== myPlayerId);
+                            const isTaken = !!takenByPlayer;
+
+                            // 頭文字を取得（ひらがな・カタカナ・漢字・英数字対応）
+                            const getInitial = (name: string) => {
+                                if (!name) return '?';
+                                return name.charAt(0).toUpperCase();
+                            };
 
                             return (
                                 <button
                                     key={color}
                                     onClick={async () => {
+                                        // 既に他のプレイヤーが使用している場合は選択不可
+                                        if (isTaken) return;
+
                                         if (isOnlineMode) {
                                             if (onUpdatePlayerColor) {
                                                 const userId = localStorage.getItem('hentai_user_id');
@@ -469,11 +487,18 @@ export default function LobbyScreen({
                                     className={`
                                         w-10 h-10 rounded-full transition-all flex items-center justify-center
                                         ${isSelected ? 'ring-4 ring-white scale-110' : 'hover:scale-110'}
-                                        ${isTaken ? 'opacity-30 cursor-not-allowed is-taken ring-2 ring-gray-500' : ''}
+                                        ${isTaken ? 'opacity-60 cursor-not-allowed ring-2 ring-gray-500' : ''}
                                     `}
                                     style={{ backgroundColor: color }}
+                                    title={isTaken ? `${takenByPlayer.name}が選択中` : undefined}
                                 >
-                                    {isSelected && <Crown className="w-5 h-5 text-white drop-shadow-md" />}
+                                    {isSelected ? (
+                                        <Crown className="w-5 h-5 text-white drop-shadow-md" />
+                                    ) : isTaken ? (
+                                        <span className="text-white font-bold text-sm drop-shadow-md">
+                                            {getInitial(takenByPlayer.name)}
+                                        </span>
+                                    ) : null}
                                 </button>
                             );
                         })}
