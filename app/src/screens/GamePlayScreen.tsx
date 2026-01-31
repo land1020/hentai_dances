@@ -553,6 +553,9 @@ export default function GamePlayScreen({
     useEffect(() => {
         if (!gameState) return;
 
+        // オンラインモードの場合、ホスト以外は自動進行しない（ホストからのState更新を待つ）
+        if (isOnlineMode && !isHost) return;
+
         if (gameState.phase === GamePhase.SETUP) {
             // セットアップ完了後、少し待ってからターン開始
             const timer = setTimeout(() => {
@@ -1592,6 +1595,9 @@ export default function GamePlayScreen({
                 animationInfo={gameState.arrestAnimationInfo}
                 players={gameState.players}
                 onComplete={() => {
+                    // オンラインモードの場合、ホスト以外はState更新しない
+                    if (isOnlineMode && !isHost) return;
+
                     // 演出終了後、勝敗判定を実行
                     const newState = completeArrestAnimation(gameState);
                     setGameState(newState);
@@ -1603,6 +1609,9 @@ export default function GamePlayScreen({
                 animationInfo={gameState.culpritVictoryAnimationInfo}
                 players={gameState.players}
                 onComplete={() => {
+                    // オンラインモードの場合、ホスト以外はState更新しない
+                    if (isOnlineMode && !isHost) return;
+
                     // 演出終了後、勝利を確定
                     const newState = completeCulpritVictoryAnimation(gameState);
                     setGameState(newState);
