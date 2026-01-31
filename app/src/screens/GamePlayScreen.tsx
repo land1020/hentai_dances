@@ -264,9 +264,9 @@ function PlayerMat({
     // 位置に応じたクラス
     const containerClasses = {
         bottom: 'w-full max-w-md mx-auto hidden', // 自分は別コンポーネントで表示
-        left: 'w-[280px]',
-        right: 'w-[280px]',
-        top: 'w-[280px]'
+        left: 'w-full max-w-[340px] md:w-[280px]',
+        right: 'w-full max-w-[340px] md:w-[280px]',
+        top: 'w-full max-w-[340px] md:w-[280px]'
     };
 
     if (position === 'bottom') return null;
@@ -407,6 +407,7 @@ interface GamePlayScreenProps {
     initialGameState?: GameState | null;
     onGameStateChange?: (newState: GameState) => Promise<void>;
     isHost?: boolean;
+    hostId?: string;
 }
 
 export default function GamePlayScreen({
@@ -414,7 +415,8 @@ export default function GamePlayScreen({
     onlineUserId,
     initialGameState,
     onGameStateChange,
-    isHost = true // ローカルモードではデフォルトでホスト
+    isHost = true, // ローカルモードではデフォルトでホスト
+    hostId
 }: GamePlayScreenProps = {}) {
     const { roomId } = useParams();
     const navigate = useNavigate();
@@ -854,13 +856,19 @@ export default function GamePlayScreen({
 
     // リザルトへ
     const handleGoToResult = () => {
-        if (roomState && gameState) {
-            const updatedRoom = {
-                ...roomState,
-                status: 'FINISHED' as const,
-                gameState
+        // 現在のgameStateを保存してリザルト画面へ渡す
+        if (gameState && roomId) {
+            // オンラインモードの場合、roomStateがnull（または古い）可能性があるため、
+            // 現在のgameStateを使って新しい保存用Stateを構築する
+            const stateToSave: LocalRoomState = {
+                roomId,
+                hostId: hostId || roomState?.hostId || (isHost ? myPlayer?.id || '' : ''),
+                players: gameState.players, // 最新のプレイヤー情報（レベル変動済み）を使用
+                status: 'FINISHED',
+                gameState: gameState,
+                debugMode: roomState?.debugMode ?? false
             };
-            saveRoomState(updatedRoom);
+            saveRoomState(stateToSave);
         }
         navigate(`/result/${roomId}`);
     };
@@ -946,10 +954,10 @@ export default function GamePlayScreen({
             </div>
 
             {/* 中央: 左プレイヤー / メイン画面 / 右プレイヤー */}
-            <div className="flex-1 flex items-stretch px-2 gap-2 min-h-0">
+            <div className="flex-1 flex flex-col md:flex-row items-center md:items-stretch px-2 gap-4 md:gap-2 min-h-0 overflow-y-auto md:overflow-visible scrollbar-hide py-2">
 
                 {/* 左側プレイヤー（次のプレイヤー） */}
-                <div className="w-[280px] flex-shrink-0 flex items-center justify-center">
+                <div className="w-full md:w-[280px] flex-shrink-0 flex items-center justify-center order-2 md:order-none">
                     {gameState.players.map((p, i) => {
                         if (getRelativePosition(i) === 'left') {
                             return (
@@ -970,7 +978,7 @@ export default function GamePlayScreen({
                 </div>
 
                 {/* メイン画面（中央） */}
-                <div className="flex-1 flex items-center justify-center">
+                <div className="w-full md:flex-1 flex items-center justify-center py-2 md:py-0 order-1 md:order-none">
                     <div className="w-full max-w-md aspect-[16/10] bg-yellow-400 rounded-2xl shadow-[0_0_40px_rgba(250,204,21,0.3)] flex flex-col items-center justify-center p-4 border-b-8 border-yellow-500 relative overflow-hidden">
                         {/* 背景パターン */}
                         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px]" />
@@ -1002,7 +1010,7 @@ export default function GamePlayScreen({
                 </div>
 
                 {/* 右側プレイヤー（最後のプレイヤー） */}
-                <div className="w-[280px] flex-shrink-0 flex items-center justify-center">
+                <div className="w-full md:w-[280px] flex-shrink-0 flex items-center justify-center order-3 md:order-none">
                     {gameState.players.map((p, i) => {
                         if (getRelativePosition(i) === 'right') {
                             return (

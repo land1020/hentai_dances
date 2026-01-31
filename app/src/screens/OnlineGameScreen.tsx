@@ -61,6 +61,7 @@ export default function OnlineGameScreen() {
             initialGameState={room.gameState}
             onGameStateChange={syncGameState}
             isHost={room.hostId === userId}
+            hostId={room.hostId}
         />
     );
 }
