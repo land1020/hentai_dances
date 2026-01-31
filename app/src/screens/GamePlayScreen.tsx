@@ -1014,7 +1014,7 @@ export default function GamePlayScreen({
             </div>
 
             {/* 中央: 左プレイヤー / メイン画面 / 右プレイヤー */}
-            <div className="flex-1 flex flex-row items-center justify-start md:justify-center px-4 gap-4 overflow-x-auto scrollbar-hide py-2 w-full snap-x snap-mandatory">
+            <div className="flex-1 flex flex-row items-center justify-center px-4 gap-4 overflow-x-auto scrollbar-hide py-2 w-full snap-x snap-mandatory">
 
                 {/* 左側プレイヤー（次のプレイヤー） */}
                 <div className="min-w-[85vw] md:min-w-[280px] md:w-[280px] flex-shrink-0 flex items-center justify-center order-1 snap-center">
