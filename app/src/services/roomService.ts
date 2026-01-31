@@ -41,6 +41,14 @@ interface RoomDocument {
 const ROOMS_COLLECTION = 'hentai_rooms';
 
 /**
+ * データからundefinedを除去（Firestore用）
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sanitizePayload<T>(data: T): T {
+    return JSON.parse(JSON.stringify(data));
+}
+
+/**
  * 新しいルームを作成
  */
 export async function createRoom(
@@ -59,7 +67,7 @@ export async function createRoom(
         debugMode: false,
     };
 
-    await setDoc(roomRef, roomData);
+    await setDoc(roomRef, sanitizePayload(roomData));
 }
 
 /**
@@ -122,9 +130,9 @@ export async function joinRoom(roomId: string, player: Player): Promise<boolean>
         return false;
     }
 
-    await updateDoc(roomRef, {
+    await updateDoc(roomRef, sanitizePayload({
         players: [...data.players, player],
-    });
+    }));
 
     return true;
 }
@@ -145,7 +153,7 @@ export async function updatePlayerColor(roomId: string, playerId: string, color:
         p.id === playerId ? { ...p, color } : p
     );
 
-    await updateDoc(roomRef, { players: newPlayers });
+    await updateDoc(roomRef, sanitizePayload({ players: newPlayers }));
 }
 
 /**
@@ -175,10 +183,10 @@ export async function leaveRoom(roomId: string, playerId: string): Promise<void>
         newHostId = humanPlayers.length > 0 ? humanPlayers[0].id : newPlayers[0].id;
     }
 
-    await updateDoc(roomRef, {
+    await updateDoc(roomRef, sanitizePayload({
         players: newPlayers,
         hostId: newHostId,
-    });
+    }));
 }
 
 /**
@@ -186,7 +194,7 @@ export async function leaveRoom(roomId: string, playerId: string): Promise<void>
  */
 export async function updatePlayers(roomId: string, players: Player[]): Promise<void> {
     const roomRef = doc(db, ROOMS_COLLECTION, roomId);
-    await updateDoc(roomRef, { players });
+    await updateDoc(roomRef, sanitizePayload({ players }));
 }
 
 /**
@@ -194,7 +202,7 @@ export async function updatePlayers(roomId: string, players: Player[]): Promise<
  */
 export async function updateGameState(roomId: string, gameState: GameState): Promise<void> {
     const roomRef = doc(db, ROOMS_COLLECTION, roomId);
-    await updateDoc(roomRef, { gameState });
+    await updateDoc(roomRef, sanitizePayload({ gameState }));
 }
 
 /**
@@ -239,7 +247,7 @@ export async function submitCardSelectionTransaction(
             exchangeState: newExchangeState
         };
 
-        transaction.update(roomRef, { gameState: newGameState });
+        transaction.update(roomRef, sanitizePayload({ gameState: newGameState }));
     });
 }
 
@@ -251,7 +259,7 @@ export async function updateRoomStatus(
     status: 'WAITING' | 'PLAYING' | 'FINISHED'
 ): Promise<void> {
     const roomRef = doc(db, ROOMS_COLLECTION, roomId);
-    await updateDoc(roomRef, { status });
+    await updateDoc(roomRef, sanitizePayload({ status }));
 }
 
 /**
@@ -266,7 +274,7 @@ export async function updateRoom(roomId: string, data: Partial<OnlineRoomState>)
     if (data.gameState !== undefined) updateData.gameState = data.gameState;
     if (data.debugMode !== undefined) updateData.debugMode = data.debugMode;
 
-    await updateDoc(roomRef, updateData);
+    await updateDoc(roomRef, sanitizePayload(updateData));
 }
 
 /**
