@@ -265,9 +265,9 @@ function PlayerMat({
     // 位置に応じたクラス
     const containerClasses = {
         bottom: 'w-full max-w-md mx-auto hidden', // 自分は別コンポーネントで表示
-        left: 'w-full max-w-[280px] md:w-[200px]',
-        right: 'w-full max-w-[280px] md:w-[200px]',
-        top: 'w-full max-w-[280px] md:w-[200px]'
+        left: 'w-full max-w-[320px] md:w-[240px]',
+        right: 'w-full max-w-[320px] md:w-[240px]',
+        top: 'w-full max-w-[320px] md:w-[240px]'
     };
 
     if (position === 'bottom') return null;
@@ -1014,10 +1014,10 @@ export default function GamePlayScreen({
             </div>
 
             {/* 中央: 左プレイヤー / メイン画面 / 右プレイヤー */}
-            <div className="flex-1 flex flex-row items-center justify-center px-4 gap-2 overflow-x-auto scrollbar-hide py-2 snap-x snap-mandatory">
+            <div className="flex-none flex flex-row items-center justify-center px-4 gap-2 overflow-x-auto scrollbar-hide py-2 snap-x snap-mandatory">
 
                 {/* 左側プレイヤー（次のプレイヤー） */}
-                <div className="min-w-[85vw] md:min-w-[200px] md:w-[200px] flex-shrink-0 flex items-center justify-center order-1 snap-center">
+                <div className="min-w-[85vw] md:min-w-[240px] md:w-[240px] flex-shrink-0 flex items-center justify-center order-1 snap-center">
                     {gameState.players.map((p, i) => {
                         if (getRelativePosition(i) === 'left') {
                             return (
@@ -1070,7 +1070,7 @@ export default function GamePlayScreen({
                 </div>
 
                 {/* 右側プレイヤー（最後のプレイヤー） */}
-                <div className="min-w-[85vw] md:min-w-[200px] md:w-[200px] flex-shrink-0 flex items-center justify-center order-3 snap-center">
+                <div className="min-w-[85vw] md:min-w-[240px] md:w-[240px] flex-shrink-0 flex items-center justify-center order-3 snap-center">
                     {gameState.players.map((p, i) => {
                         if (getRelativePosition(i) === 'right') {
                             return (
@@ -1092,7 +1092,7 @@ export default function GamePlayScreen({
             </div>
 
             {/* 自分（下部固定） */}{/* MyPlayerMatをPlayerMatのデザインに合わせるが、操作性を維持 */}
-            <div className="relative z-30 pb-2 px-2 flex justify-center -mt-2">
+            <div className="relative z-30 pb-2 px-2 flex justify-center mt-2">
                 <motion.div
                     className={`
                         relative rounded-xl overflow-visible shadow-2xl border-4 transition-all w-full max-w-2xl
