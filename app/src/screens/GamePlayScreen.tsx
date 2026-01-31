@@ -303,7 +303,7 @@ function PlayerMat({
                         </span>
                     </div>
                     {/* 名前 */}
-                    <span className="truncate font-bold text-sm flex-1">
+                    <span className="bg-black/30 px-1.5 py-0.5 rounded truncate font-bold text-sm flex-1">
                         {player.name}
                     </span>
                 </div>
@@ -1124,7 +1124,7 @@ export default function GamePlayScreen({
                                 <span className="bg-black/20 px-3 py-0.5 rounded text-base">
                                     {myPlayer.currentPrefix || '???'}
                                 </span>
-                                <span className="truncate text-xl">{myPlayer.name}</span>
+                                <span className="bg-black/30 px-3 py-0.5 rounded truncate text-xl">{myPlayer.name}</span>
                             </div>
                         </div>
                     </div>
