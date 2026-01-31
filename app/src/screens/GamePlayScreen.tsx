@@ -925,7 +925,7 @@ export default function GamePlayScreen({
             };
             saveRoomState(stateToSave);
         }
-        navigate(`/result/${roomId}`);
+        navigate(`/result/${roomId}`, { state: { isOnline: isOnlineMode } });
     };
 
     // ロビーへ戻る

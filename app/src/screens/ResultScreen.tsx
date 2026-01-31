@@ -3,7 +3,7 @@
 // ====================================
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Confetti from 'react-confetti';
 import {
@@ -22,10 +22,18 @@ import type { Player, GameResult } from '../types';
 import { initializeGame } from '../engine/GameEngine';
 import HentaiGauge from '../components/HentaiGauge';
 import { addToHallOfFame } from './HallOfFameScreen';
+import { useOnlineRoom, getOrCreateUserId } from '../hooks/useOnlineRoom';
+import { updateRoom } from '../services/roomService';
 
 export default function ResultScreen() {
     const { roomId } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
+    const isOnline = location.state?.isOnline;
+    const userId = getOrCreateUserId();
+
+    const { room } = useOnlineRoom(isOnline ? roomId || null : null);
+
     const [roomState, setRoomState] = useState<LocalRoomState | null>(null);
     const [showConfetti, setShowConfetti] = useState(true);
     const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -58,6 +66,17 @@ export default function ResultScreen() {
         return () => clearTimeout(timer);
     }, [roomId, navigate]);
 
+    // オンライン: ルーム状態監視と自動遷移
+    useEffect(() => {
+        if (!isOnline || !room || !roomId) return;
+
+        if (room.status === 'PLAYING') {
+            navigate(`/online-game/${roomId}`);
+        } else if (room.status === 'WAITING') {
+            navigate(`/online-lobby/${roomId}`);
+        }
+    }, [isOnline, room?.status, roomId, navigate]);
+
     // 次のゲームのためのプレイヤー情報を生成
     const getNextPlayers = () => {
         if (!roomState || !roomState.players) return [];
@@ -82,37 +101,57 @@ export default function ResultScreen() {
     };
 
     // もう一度遊ぶ（即時リスタート）
-    const handlePlayAgain = () => {
+    const handlePlayAgain = async () => {
         if (roomState) {
             const updatedPlayers = getNextPlayers();
             // ゲーム開始処理
             const newGameState = initializeGame(updatedPlayers);
 
-            const newState: LocalRoomState = {
-                ...roomState,
-                players: updatedPlayers,
-                status: 'PLAYING' as const,
-                gameState: newGameState,
-            };
-            saveRoomState(newState);
-            navigate(`/game/${roomId}`);
+            if (isOnline && roomId) {
+                // オンライン: 全員の画面を切り替えるためにFirestoreを更新
+                await updateRoom(roomId, {
+                    players: updatedPlayers,
+                    gameState: newGameState,
+                    status: 'PLAYING'
+                });
+                // ホスト自身の画面遷移はuseEffectで検知して行う（または念のためここでも呼ぶ？いや、useEffectに任せるのが安全）
+            } else {
+                // ローカル
+                const newState: LocalRoomState = {
+                    ...roomState,
+                    players: updatedPlayers,
+                    status: 'PLAYING' as const,
+                    gameState: newGameState,
+                };
+                saveRoomState(newState);
+                navigate(`/game/${roomId}`);
+            }
         }
     };
 
     // ロビーに戻る
-    const handleBackToLobby = () => {
+    const handleBackToLobby = async () => {
         if (roomState) {
             const updatedPlayers = getNextPlayers();
 
-            // ロビー待機状態へ
-            const newState: LocalRoomState = {
-                ...roomState,
-                players: updatedPlayers,
-                status: 'WAITING' as const,
-                gameState: null,
-            };
-            saveRoomState(newState);
-            navigate(`/lobby/${roomId}`);
+            if (isOnline && roomId) {
+                // オンライン: 全員ロビーへ
+                await updateRoom(roomId, {
+                    players: updatedPlayers,
+                    status: 'WAITING',
+                    gameState: null // ゲーム状態クリア
+                });
+            } else {
+                // ローカル: ロビー待機状態へ
+                const newState: LocalRoomState = {
+                    ...roomState,
+                    players: updatedPlayers,
+                    status: 'WAITING' as const,
+                    gameState: null,
+                };
+                saveRoomState(newState);
+                navigate(`/lobby/${roomId}`);
+            }
         }
     };
 
@@ -169,7 +208,9 @@ export default function ResultScreen() {
     };
 
     // ルームマスターかどうかを判定
-    const isRoomMaster = roomState?.hostId === roomState?.players.find(p => !p.isNpc)?.id;
+    const isRoomMaster = isOnline
+        ? room?.hostId === userId
+        : roomState?.hostId === roomState?.players.find(p => !p.isNpc)?.id;
 
     if (!roomState || !roomState.gameState) {
         return (
@@ -461,21 +502,33 @@ export default function ResultScreen() {
                     transition={{ delay: 0.9 }}
                     className="space-y-3"
                 >
-                    <button
-                        onClick={handlePlayAgain}
-                        className="btn-primary w-full flex items-center justify-center gap-2"
-                    >
-                        <RotateCcw className="w-5 h-5" />
-                        もう一度遊ぶ
-                    </button>
+                    {/* オンラインの場合、ホスト以外には待機メッセージを表示 */}
+                    {isOnline && !isRoomMaster && (
+                        <div className="text-center p-4 bg-white/5 rounded-lg border border-white/10 animate-pulse">
+                            <p className="text-gray-300">ホストの操作を待っています...</p>
+                        </div>
+                    )}
 
-                    <button
-                        onClick={handleBackToLobby}
-                        className="btn-secondary w-full flex items-center justify-center gap-2"
-                    >
-                        <LogOut className="w-5 h-5" />
-                        ロビーに戻る
-                    </button>
+                    {/* ホストまたはローカルの場合のみ操作可能 */}
+                    {(!isOnline || isRoomMaster) && (
+                        <>
+                            <button
+                                onClick={handlePlayAgain}
+                                className="btn-primary w-full flex items-center justify-center gap-2"
+                            >
+                                <RotateCcw className="w-5 h-5" />
+                                もう一度遊ぶ
+                            </button>
+
+                            <button
+                                onClick={handleBackToLobby}
+                                className="btn-secondary w-full flex items-center justify-center gap-2"
+                            >
+                                <LogOut className="w-5 h-5" />
+                                ロビーに戻る
+                            </button>
+                        </>
+                    )}
 
                     {isRoomMaster && (
                         <button
