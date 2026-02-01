@@ -1096,23 +1096,33 @@ export default function GamePlayScreen({
 
             {/* 上部: TOPプレイヤー */}
             <div className="flex-shrink-0 pt-16 pb-2 px-4 flex justify-center gap-4">
-                {gameState.players.map((p, i) => {
-                    if (getRelativePosition(i) === 'top') {
-                        return (
-                            <PlayerMat
-                                key={p.id}
-                                player={p}
-                                isActive={i === gameState.activePlayerIndex}
-                                isTargetable={!!(isSelectingTarget && p.isAlive)}
-                                playedCards={lastPlayedCards[p.id]}
-                                onClick={() => handleSelectTarget(p.id)}
-                                position='top'
-                                onCardClick={handlePlayedCardClick}
-                            />
-                        );
-                    }
-                    return null;
-                })}
+                {gameState.players
+                    .map((p, i) => ({ player: p, index: i, position: getRelativePosition(i) }))
+                    .filter(item => item.position === 'top')
+                    .sort((a, b) => {
+                        // 左側（TopLeft）から右側（TopRight）へ向かって配置
+                        // 時計回り（自分→右→上→左）の場合、
+                        // 上の列は 右（早い順） -> 左（遅い順） となるべきだが、
+                        // フレックスボックスは左から右へ並ぶため、
+                        // 順序（diff）が大きい順（遅い順＝左側）から 小さい順（早い順＝右側） に並べる必要がある
+                        // diff: 2(NextNext) ... 5(PrevPrev)
+                        // 欲しい順: 5, 4, 3, 2
+                        const diffA = (a.index - myIndex + playerCount) % playerCount;
+                        const diffB = (b.index - myIndex + playerCount) % playerCount;
+                        return diffB - diffA;
+                    })
+                    .map(({ player, index }) => (
+                        <PlayerMat
+                            key={player.id}
+                            player={player}
+                            isActive={index === gameState.activePlayerIndex}
+                            isTargetable={!!(isSelectingTarget && player.isAlive)}
+                            playedCards={lastPlayedCards[player.id]}
+                            onClick={() => handleSelectTarget(player.id)}
+                            position='top'
+                            onCardClick={handlePlayedCardClick}
+                        />
+                    ))}
             </div>
 
             {/* 中央: 左プレイヤー / メイン画面 / 右プレイヤー */}
