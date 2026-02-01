@@ -16,7 +16,7 @@ export function initializeGame(
 ): GameState {
     const playerCount = players.length;
 
-    // プレイヤーの並び順をランダムにシャッフル
+    // プレイヤーの並び順をランダムにシャッフル（席順をランダムにしつつ、右回りのターン順序は維持する）
     const shuffledPlayers = [...players];
     for (let i = shuffledPlayers.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));

@@ -34,6 +34,66 @@ import CulpritVictoryAnimationOverlay from '../components/CulpritVictoryAnimatio
 
 
 
+// カード選択モーダル（正常者用 - ランダム配置）
+function SelectionCardModal({
+    targetPlayer,
+    onSelect
+}: {
+    targetPlayer: Player;
+    onSelect: (cardId: string) => void;
+}) {
+    // 表示用に手札をシャッフル
+    const shuffledHand = useMemo(() => {
+        const hand = [...targetPlayer.hand];
+        // Fisher-Yates shuffle
+        for (let i = hand.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [hand[i], hand[j]] = [hand[j], hand[i]];
+        }
+        return hand;
+    }, [targetPlayer.hand]);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
+            <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="relative z-10 bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 shadow-2xl w-full max-w-2xl"
+            >
+                <div className="text-center mb-6">
+                    <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-2" />
+                    <h3 className="text-xl font-bold text-white">カードを選択してください</h3>
+                    <p className="text-gray-400">変態だと思うカードをタップ！</p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-4 mb-6">
+                    {shuffledHand.map((card, index) => (
+                        <motion.div
+                            key={card.id}
+                            whileHover={{ scale: 1.1, rotate: 3 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => onSelect(card.id)}
+                            className="w-24 h-36 bg-gradient-to-br from-indigo-800 to-purple-900 rounded-lg border-2 border-white/20 shadow-lg cursor-pointer flex items-center justify-center relative overflow-hidden group"
+                        >
+                            <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.1)_1px,_transparent_1px)] bg-[length:10px_10px]" />
+                            <div className="text-4xl filter grayscale group-hover:grayscale-0 transition-all duration-300">
+                                🃏
+                            </div>
+                            <div className="absolute top-1 left-2 text-[10px] text-white/50">#{index + 1}</div>
+                        </motion.div>
+                    ))}
+                </div>
+                <div className="text-center text-sm text-gray-500">
+                    {targetPlayer.name}の手札: {targetPlayer.hand.length}枚
+                </div>
+            </motion.div>
+        </div>
+    );
+}
+
 // カード詳細モーダル
 function CardDetailModal({
     card,
@@ -1467,52 +1527,19 @@ export default function GamePlayScreen({
 
                 {/* カード選択モーダル（正常者用） */}
                 {gameState.phase === GamePhase.SELECTING_CARD && gameState.pendingAction?.targetIds && (
-                    function () {
+                    (function () {
                         const activePlayer = gameState.players[gameState.activePlayerIndex];
                         if (!myPlayer || activePlayer.id !== myPlayer.id) return null;
                         const targetId = gameState.pendingAction!.targetIds![0];
                         const targetPlayer = gameState.players.find(p => p.id === targetId);
                         if (!targetPlayer) return null;
                         return (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
-                                <motion.div
-                                    initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                                    className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                                />
-                                <motion.div
-                                    initial={{ scale: 0.9, opacity: 0 }}
-                                    animate={{ scale: 1, opacity: 1 }}
-                                    className="relative z-10 bg-gray-900 border-2 border-yellow-500 rounded-2xl p-6 shadow-2xl w-full max-w-2xl"
-                                >
-                                    <div className="text-center mb-6">
-                                        <AlertCircle className="w-10 h-10 text-yellow-500 mx-auto mb-2" />
-                                        <h3 className="text-xl font-bold text-white">カードを選択してください</h3>
-                                        <p className="text-gray-400">変態だと思うカードをタップ！</p>
-                                    </div>
-                                    <div className="flex flex-wrap justify-center gap-4 mb-6">
-                                        {targetPlayer.hand.map((card, index) => (
-                                            <motion.div
-                                                key={card.id}
-                                                whileHover={{ scale: 1.1, rotate: 3 }}
-                                                whileTap={{ scale: 0.9 }}
-                                                onClick={() => handleSelectCard(card.id)}
-                                                className="w-24 h-36 bg-gradient-to-br from-indigo-800 to-purple-900 rounded-lg border-2 border-white/20 shadow-lg cursor-pointer flex items-center justify-center relative overflow-hidden group"
-                                            >
-                                                <div className="absolute inset-0 bg-[radial-gradient(circle,_rgba(255,255,255,0.1)_1px,_transparent_1px)] bg-[length:10px_10px]" />
-                                                <div className="text-4xl filter grayscale group-hover:grayscale-0 transition-all duration-300">
-                                                    🃏
-                                                </div>
-                                                <div className="absolute top-1 left-2 text-[10px] text-white/50">#{index + 1}</div>
-                                            </motion.div>
-                                        ))}
-                                    </div>
-                                    <div className="text-center text-sm text-gray-500">
-                                        {targetPlayer.name}の手札: {targetPlayer.hand.length}枚
-                                    </div>
-                                </motion.div>
-                            </div>
+                            <SelectionCardModal
+                                targetPlayer={targetPlayer}
+                                onSelect={handleSelectCard}
+                            />
                         );
-                    }()
+                    })()
                 )}
             </div>
 
