@@ -146,11 +146,13 @@ function moveToNextPlayer(state: GameState): GameState {
         return { ...state, phase: GamePhase.GAME_OVER };
     }
 
-    let nextIndex = (state.activePlayerIndex + 1) % state.players.length;
+    // 左隣（index - 1）へ移動（時計回り）
+    // JavaScriptの % 演算子は負の数を返すことがあるため、+ lengthする
+    let nextIndex = (state.activePlayerIndex - 1 + state.players.length) % state.players.length;
 
     // 生存しているプレイヤーまでスキップ
     while (!state.players[nextIndex].isAlive) {
-        nextIndex = (nextIndex + 1) % state.players.length;
+        nextIndex = (nextIndex - 1 + state.players.length) % state.players.length;
     }
 
     // 巡数を計算: 場に出ているカード枚数 / プレイヤー数 + 1
