@@ -1069,8 +1069,8 @@ export default function GamePlayScreen({
 
         // 4人プレイの場合: 自分(bottom) -> 次(left) -> 対面(top) -> 前(right)
         // 3人プレイの場合: 自分(bottom) -> 次(left) -> 前(right)
-        if (diff === 1) return 'left';
-        if (diff === playerCount - 1) return 'right';
+        if (diff === 1) return 'right';
+        if (diff === playerCount - 1) return 'left';
         return 'top';
     };
 
