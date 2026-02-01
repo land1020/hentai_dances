@@ -787,9 +787,9 @@ function executeInformationExchange(state: GameState): GameState {
         // 渡すカード
         const cardToGive = cardsToPass[index];
 
-        // 受け取るカード（参加者リストの右隣＝前のインデックスの人から受け取る）
-        // 左隣に渡す = 右隣から受け取る
-        const rightNeighborIndex = (index + participants.length - 1) % participants.length;
+        // 受け取るカード（参加者リストの右隣＝次のインデックスの人から受け取る）
+        // 左隣に渡す = 右隣（Index + 1）から受け取る
+        const rightNeighborIndex = (index + 1) % participants.length;
         const cardToReceive = cardsToPass[rightNeighborIndex];
         const rightNeighbor = participants[rightNeighborIndex];
 
@@ -850,10 +850,9 @@ function executeRumorExchange(state: GameState): GameState {
 
     // 各プレイヤーが右隣から引くカードをランダムに選択
     const cardsToDraw = participants.map((_player, index) => {
-        // 参加者リスト内での右隣（index - 1）
-        // 左隣に渡す = 右隣から受け取る、というRumorの定義（時計回りにカードが動くイメージ）
-        // 以前のロジック: index-1 が右隣として実装されていたのでそれに合わせる
-        const rightNeighborIndex = (index - 1 + participantCount) % participantCount;
+        // 参加者リスト内での右隣（index + 1）
+        // 右隣から引く = Index + 1 の人から引く
+        const rightNeighborIndex = (index + 1) % participantCount;
         const rightNeighbor = participants[rightNeighborIndex];
 
         // 参加者は必ず手札を持っているはずだが念のためチェック
@@ -877,13 +876,13 @@ function executeRumorExchange(state: GameState): GameState {
         const cardToDraw = cardsToDraw[index];
         if (!cardToDraw) return;
 
-        // 引かれる相手（右隣）
-        const rightNeighborIndex = (index - 1 + participantCount) % participantCount;
+        // 引かれる相手（右隣 = index + 1）
+        const rightNeighborIndex = (index + 1) % participantCount;
         const fromPlayer = participants[rightNeighborIndex];
 
-        // 私からカードを引く人（左隣 = index + 1）
+        // 私からカードを引く人（左隣 = index - 1）
         // 左隣の人は、私のカードを引く
-        const takerIndex = (index + 1) % participantCount;
+        const takerIndex = (index - 1 + participantCount) % participantCount;
         const cardToBeTaken = cardsToDraw[takerIndex];
 
         // 交換情報を記録
