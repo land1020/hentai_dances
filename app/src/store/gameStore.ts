@@ -31,6 +31,7 @@ export const PLAYER_COLORS = [
     '#8AC926', // Lime Green
     '#CD84F1', // Lavender
     '#ED4C67', // Rose
+    '#795548', // Brown
 ];
 
 // 初期状態を作成

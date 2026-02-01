@@ -456,14 +456,36 @@ export function selectTarget(state: GameState, targetPlayerId: string): GameStat
 
         case 'witness':
             // 目撃者: 相手の手札を見る（画面で表示）
-            return {
-                ...state,
-                phase: GamePhase.RESOLVING_EFFECT,
-                pendingAction: {
-                    ...state.pendingAction,
-                    targetIds: [targetPlayerId],
-                },
-            };
+            {
+                const sourcePlayer = state.players[sourcePlayerIndex];
+                const targetPlayer = state.players[targetPlayerIndex];
+
+                // ログ更新: 直近のこのプレイヤーの目撃者カード使用ログに対象IDを記録
+                const newPlayedLog = [...state.playedLog];
+                const lastLogIndex = [...newPlayedLog].reverse().findIndex(log =>
+                    log.playerId === sourcePlayer.id && log.cardType === 'witness'
+                );
+
+                if (lastLogIndex !== -1) {
+                    // reverseしているので、元のインデックスを計算
+                    const realIndex = newPlayedLog.length - 1 - lastLogIndex;
+                    newPlayedLog[realIndex] = {
+                        ...newPlayedLog[realIndex],
+                        targetId: targetPlayerId
+                    };
+                }
+
+                return {
+                    ...state,
+                    phase: GamePhase.RESOLVING_EFFECT,
+                    systemMessage: `${sourcePlayer.name}は${targetPlayer.name}を目撃した`,
+                    playedLog: newPlayedLog,
+                    pendingAction: {
+                        ...state.pendingAction,
+                        targetIds: [targetPlayerId],
+                    },
+                };
+            }
 
         case 'dog':
             // 正常者: 対象を指定した後、カード選択フェーズへ移行（手動で選択）

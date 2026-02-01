@@ -25,10 +25,10 @@ export function calculateHentaiLevel(
         if (result.isWinner) {
             // 変態本人（MVP）は-1
             if (result.isMVP) {
-                newLevel -= 1;
+                newLevel = 0;
             } else if (result.usedPlotCard) {
-                // 異常性癖者（たくらみ）: 加算なし
-                // newLevel += 0;
+                // 異常性癖者（たくらみ）: -1
+                newLevel -= 1;
             }
             // その他の勝者（いる場合）: 変動なし
         } else {
@@ -43,10 +43,10 @@ export function calculateHentaiLevel(
         const isCulprit = result.playerId === victoryInfo.targetPlayerId;
 
         if (isCulprit) {
-            if (currentLevel === 3) {
+            if (currentLevel >= 3) {
                 newLevel = 4;
             } else {
-                newLevel = 3; // 強制的に3
+                newLevel = 3;
             }
         } else if (result.usedPlotCard) {
             // 異常性癖者: 敗北扱いとなり +1

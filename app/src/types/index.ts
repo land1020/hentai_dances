@@ -39,6 +39,10 @@ export interface Card {
         fromName: string;
         toName: string;
     };
+    witnessInfo?: {
+        fromName: string;
+        toName: string;
+    };
 }
 
 // プレイヤー情報
@@ -175,6 +179,7 @@ export interface PlayLog {
     cardId: string;
     cardType: CardType;
     playerId: string;
+    targetId?: string; // 対象プレイヤーID
     turn: number; // roundNumber
 }
 

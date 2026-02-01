@@ -127,6 +127,17 @@ function CardDetailModal({
                         </div>
                     )}
 
+                    {/* 目撃履歴 */}
+                    {card.witnessInfo && (
+                        <div className="text-center space-y-1 bg-blue-500/10 p-3 rounded-xl w-full border border-blue-500/30">
+                            <h3 className="text-sm font-bold text-blue-400">目撃情報</h3>
+                            <p className="text-xs text-gray-300">
+                                {card.witnessInfo.fromName} は<br />
+                                {card.witnessInfo.toName} を目撃した
+                            </p>
+                        </div>
+                    )}
+
                     {/* アクションボタン */}
                     {isPlayable ? (
                         <button
@@ -893,8 +904,39 @@ export default function GamePlayScreen({
         // cardIdがあれば、実際のTableCardsから詳細情報を検索（交換履歴などを取得）
         if (cardId && gameState) {
             const tableCard = gameState.tableCards.find(c => c.id === cardId);
-            if (tableCard && tableCard.tradeHistory) {
-                tradeHistory = tableCard.tradeHistory;
+            if (tableCard) {
+                if (tableCard.tradeHistory) {
+                    tradeHistory = tableCard.tradeHistory;
+                }
+
+                // 目撃者カードの場合、ログから情報を取得
+                if (cardType === 'witness') {
+                    const log = gameState.playedLog.slice().reverse().find(l => l.cardId === cardId);
+                    if (log && log.targetId) {
+                        const fromPlayer = gameState.players.find(p => p.id === log.playerId);
+                        const toPlayer = gameState.players.find(p => p.id === log.targetId);
+
+                        if (fromPlayer && toPlayer) {
+                            // tempCardにセットするために一時変数に入れるのが良いが
+                            // ここではCardオブジェクト作成時に直接入れる
+                        }
+                    }
+                }
+            }
+        }
+
+        let witnessInfo = undefined;
+        if (cardId && gameState && cardType === 'witness') {
+            const log = gameState.playedLog.slice().reverse().find(l => l.cardId === cardId);
+            if (log && log.targetId) {
+                const fromPlayer = gameState.players.find(p => p.id === log.playerId);
+                const toPlayer = gameState.players.find(p => p.id === log.targetId);
+                if (fromPlayer && toPlayer) {
+                    witnessInfo = {
+                        fromName: fromPlayer.name,
+                        toName: toPlayer.name
+                    };
+                }
             }
         }
 
@@ -907,7 +949,8 @@ export default function GamePlayScreen({
             icon: definition.icon,
             targetType: definition.targetType,
             sortOrder: definition.sortOrder,
-            tradeHistory: tradeHistory
+            tradeHistory: tradeHistory,
+            witnessInfo: witnessInfo
         };
 
         setDetailedCardInfo({ card: tempCard, isPlayable: false });
