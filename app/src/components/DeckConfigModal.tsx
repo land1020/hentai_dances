@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, AlertCircle, Save, RotateCcw } from 'lucide-react';
 import type { DeckConfig, CardType } from '../types';
 import { CARD_DEFINITIONS } from '../data/cards';
@@ -124,8 +124,8 @@ export default function DeckConfigModal({ isOpen, onClose, onSave, initialConfig
                     <button
                         onClick={() => setActiveTab('inventory')}
                         className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition-colors ${activeTab === 'inventory'
-                                ? 'bg-purple-500/20 text-purple-300 border-b-2 border-purple-500'
-                                : 'text-gray-400 hover:bg-white/5'
+                            ? 'bg-purple-500/20 text-purple-300 border-b-2 border-purple-500'
+                            : 'text-gray-400 hover:bg-white/5'
                             }`}
                     >
                         全体在庫 (32枚)
@@ -135,8 +135,8 @@ export default function DeckConfigModal({ isOpen, onClose, onSave, initialConfig
                             key={n}
                             onClick={() => setActiveTab(n)}
                             className={`px-4 py-3 text-sm font-bold whitespace-nowrap transition-colors ${activeTab === n
-                                    ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
-                                    : 'text-gray-400 hover:bg-white/5'
+                                ? 'bg-blue-500/20 text-blue-300 border-b-2 border-blue-500'
+                                : 'text-gray-400 hover:bg-white/5'
                                 }`}
                         >
                             {n}人プレイ
@@ -180,7 +180,7 @@ export default function DeckConfigModal({ isOpen, onClose, onSave, initialConfig
                                                     src={CARD_DEFINITIONS[type].icon}
                                                     alt=""
                                                     className="w-8 h-8 object-contain"
-                                                    onError={(e) => {
+                                                    onError={() => {
                                                         // console.error failed image 
                                                         // (e.target as HTMLImageElement).src = '/fallback.png';
                                                     }}
@@ -250,8 +250,8 @@ export default function DeckConfigModal({ isOpen, onClose, onSave, initialConfig
                                         <div
                                             key={type}
                                             className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isOverInventory
-                                                    ? 'bg-red-500/10 border-red-500/50'
-                                                    : count > 0 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/10'
+                                                ? 'bg-red-500/10 border-red-500/50'
+                                                : count > 0 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-white/5 border-white/10'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2 overflow-hidden">
@@ -299,8 +299,8 @@ export default function DeckConfigModal({ isOpen, onClose, onSave, initialConfig
                         onClick={() => onSave(config)}
                         disabled={!isInventoryValid}
                         className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${isInventoryValid
-                                ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 shadow-lg shadow-purple-500/20'
-                                : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                            ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:scale-105 shadow-lg shadow-purple-500/20'
+                            : 'bg-gray-700 text-gray-400 cursor-not-allowed'
                             }`}
                     >
                         <Save className="w-5 h-5" />

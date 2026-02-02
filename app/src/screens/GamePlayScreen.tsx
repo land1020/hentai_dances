@@ -28,6 +28,7 @@ import {
 } from '../store/gameStore';
 import { submitCardSelectionTransaction, updateRoomStatus } from '../services/roomService'; // Import transaction function
 import { initializeGame, advancePhase, playCard, canPlayCard, selectTarget, getCulpritPlayer, selectCard, submitExchangeCard, completeArrestAnimation, completeCulpritVictoryAnimation } from '../engine/GameEngine';
+import { DEFAULT_INVENTORY, DEFAULT_MANDATORY_CARDS } from '../utils/deckFactory';
 import ArrestAnimationOverlay from '../components/ArrestAnimationOverlay';
 import CulpritVictoryAnimationOverlay from '../components/CulpritVictoryAnimationOverlay';
 
@@ -1028,7 +1029,8 @@ export default function GamePlayScreen({
                 players: gameState.players, // 最新のプレイヤー情報（レベル変動済み）を使用
                 status: 'FINISHED',
                 gameState: gameState,
-                debugMode: roomState?.debugMode ?? false
+                debugMode: roomState?.debugMode ?? false,
+                deckConfig: roomState?.deckConfig ?? { inventory: DEFAULT_INVENTORY, mandatory: DEFAULT_MANDATORY_CARDS }
             };
             saveRoomState(stateToSave);
         }
