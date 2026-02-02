@@ -15,9 +15,10 @@ import {
     submitCardSelectionTransaction,
     roomExists,
     generateRoomId,
+    updateDeckConfig as updateDeckConfigService,
     type OnlineRoomState
 } from '../services/roomService';
-import type { Player, GameState } from '../types';
+import type { Player, GameState, DeckConfig } from '../types';
 
 interface UseOnlineRoomResult {
     room: OnlineRoomState | null;
@@ -36,6 +37,7 @@ interface UseOnlineRoomResult {
     syncGameState: (gameState: GameState) => Promise<void>;
     enterRoom: (roomId: string, player: Player) => Promise<{ success: boolean; message?: string; isNewRoom?: boolean }>;
     submitCardSelection: (playerId: string, cardId: string) => Promise<void>;
+    updateDeckConfig: (config: DeckConfig) => Promise<void>;
 }
 
 export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
@@ -180,6 +182,12 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         await submitCardSelectionTransaction(roomId, playerId, cardId);
     }, [roomId]);
 
+    // デッキ設定更新
+    const updateDeckConfig = useCallback(async (config: DeckConfig): Promise<void> => {
+        if (!roomId) return;
+        await updateDeckConfigService(roomId, config);
+    }, [roomId]);
+
     return {
         room,
         isLoading,
@@ -196,6 +204,7 @@ export function useOnlineRoom(roomId: string | null): UseOnlineRoomResult {
         syncGameState,
         enterRoom,
         submitCardSelection,
+        updateDeckConfig,
     };
 }
 

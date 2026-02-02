@@ -14,13 +14,15 @@ import {
 } from 'firebase/firestore';
 import type { Unsubscribe } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Player, GameState } from '../types';
+import type { Player, GameState, DeckConfig } from '../types';
+import { DEFAULT_INVENTORY, DEFAULT_MANDATORY_CARDS } from '../utils/deckFactory';
 
 // オンラインルーム状態の型
 export interface OnlineRoomState {
     roomId: string;
     hostId: string;
     players: Player[];
+    deckConfig: DeckConfig;
     status: 'WAITING' | 'PLAYING' | 'FINISHED';
     gameState: GameState | null;
     createdAt: Date;
@@ -31,6 +33,7 @@ export interface OnlineRoomState {
 interface RoomDocument {
     hostId: string;
     players: Player[];
+    deckConfig: DeckConfig;
     status: 'WAITING' | 'PLAYING' | 'FINISHED';
     gameState: GameState | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,6 +64,10 @@ export async function createRoom(
     const roomData: RoomDocument = {
         hostId,
         players: [hostPlayer],
+        deckConfig: {
+            inventory: DEFAULT_INVENTORY,
+            mandatory: JSON.parse(JSON.stringify(DEFAULT_MANDATORY_CARDS))
+        },
         status: 'WAITING',
         gameState: null,
         createdAt: serverTimestamp(),
@@ -95,6 +102,10 @@ export async function getRoom(roomId: string): Promise<OnlineRoomState | null> {
         roomId,
         hostId: data.hostId,
         players: data.players,
+        deckConfig: data.deckConfig || {
+            inventory: DEFAULT_INVENTORY,
+            mandatory: DEFAULT_MANDATORY_CARDS
+        },
         status: data.status,
         gameState: data.gameState,
         createdAt: data.createdAt?.toDate?.() || new Date(),
@@ -252,6 +263,14 @@ export async function submitCardSelectionTransaction(
 }
 
 /**
+ * デッキ構成を更新
+ */
+export async function updateDeckConfig(roomId: string, deckConfig: DeckConfig): Promise<void> {
+    const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+    await updateDoc(roomRef, sanitizePayload({ deckConfig }));
+}
+
+/**
  * ルームステータスを更新
  */
 export async function updateRoomStatus(
@@ -297,6 +316,10 @@ export function subscribeToRoom(
             roomId,
             hostId: data.hostId,
             players: data.players,
+            deckConfig: data.deckConfig || {
+                inventory: DEFAULT_INVENTORY,
+                mandatory: DEFAULT_MANDATORY_CARDS
+            },
             status: data.status,
             gameState: data.gameState,
             createdAt: data.createdAt?.toDate?.() || new Date(),

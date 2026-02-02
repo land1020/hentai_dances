@@ -42,11 +42,13 @@ interface LobbyScreenProps {
     isOnlineMode?: boolean;
     onlineRoomId?: string;
     onlineRoomState?: OnlineRoomState | null;
+    currentUserId?: string;
     onAddNpc?: () => Promise<void>;
     onRemoveNpc?: () => Promise<void>;
     onStartGame?: () => Promise<void>;
     onUpdatePlayerName?: (playerId: string, name: string) => Promise<void>;
     onUpdatePlayerColor?: (playerId: string, color: string) => Promise<void>;
+    onUpdateDeckConfig?: (config: DeckConfig) => Promise<void>;
     onLeave?: () => void;
 }
 
@@ -62,6 +64,7 @@ export default function LobbyScreen({
     onStartGame,
     onUpdatePlayerName,
     onUpdatePlayerColor,
+    onUpdateDeckConfig,
     onLeave
 }: LobbyScreenProps = {}) {
     const { roomId: paramRoomId } = useParams();
@@ -78,6 +81,11 @@ export default function LobbyScreen({
     const [editingNpcId, setEditingNpcId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
     const [showDeckConfigModal, setShowDeckConfigModal] = useState(false);
+
+    // ホスト判定
+    const isHost = isOnlineMode
+        ? (onlineRoomState?.hostId === currentUserId)
+        : true;
 
     // 初期化
     // 初期化（ローカルモードのみ）
@@ -197,7 +205,7 @@ export default function LobbyScreen({
         const targetTotal = playerCount * 4;
 
         // デッキ設定を取得（フォールバック付き）
-        const deckConfig: DeckConfig = (roomState as any).deckConfig || {
+        const deckConfig: DeckConfig = roomState?.deckConfig || {
             inventory: DEFAULT_INVENTORY,
             mandatory: DEFAULT_MANDATORY_CARDS
         };
@@ -291,7 +299,7 @@ export default function LobbyScreen({
 
     // デッキバリデーション
     const deckValidation = useMemo(() => {
-        const config: DeckConfig = (roomState as any).deckConfig || {
+        const config: DeckConfig = roomState?.deckConfig || {
             inventory: DEFAULT_INVENTORY,
             mandatory: DEFAULT_MANDATORY_CARDS
         };
@@ -514,7 +522,7 @@ export default function LobbyScreen({
                             <h2 className="text-lg font-bold">デッキ構成</h2>
                         </div>
                         <div className="flex items-center gap-2">
-                            {!isOnlineMode && (
+                            {isHost && (
                                 <button
                                     onClick={() => setShowDeckConfigModal(true)}
                                     className="px-3 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded text-sm transition-colors border border-purple-500/30"
@@ -645,16 +653,20 @@ export default function LobbyScreen({
                 </div>
             </div>
             {/* デッキ設定モーダル */}
-            {localRoomState && (
+            {(localRoomState || (isOnlineMode && onlineRoomState)) && (
                 <DeckConfigModal
                     isOpen={showDeckConfigModal}
                     onClose={() => setShowDeckConfigModal(false)}
                     onSave={(newConfig) => {
-                        const newState = updateDeckConfig(localRoomState, newConfig);
-                        setLocalRoomState(newState);
+                        if (isOnlineMode && onUpdateDeckConfig) {
+                            onUpdateDeckConfig(newConfig);
+                        } else if (localRoomState) {
+                            const newState = updateDeckConfig(localRoomState, newConfig);
+                            setLocalRoomState(newState);
+                        }
                         setShowDeckConfigModal(false);
                     }}
-                    initialConfig={localRoomState.deckConfig || {
+                    initialConfig={(isOnlineMode ? onlineRoomState?.deckConfig : localRoomState?.deckConfig) || {
                         inventory: DEFAULT_INVENTORY,
                         mandatory: DEFAULT_MANDATORY_CARDS
                     }}

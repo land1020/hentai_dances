@@ -26,7 +26,8 @@ export default function OnlineLobbyScreen() {
         updatePlayerName,
         updatePlayerColor,
         startGame,
-        leaveCurrentRoom
+        leaveCurrentRoom,
+        updateDeckConfig
     } = useOnlineRoom(roomId || null);
 
     // ルーム消失チェック
@@ -77,7 +78,7 @@ export default function OnlineLobbyScreen() {
 
     const handleStartGame = async () => {
         if (!room) return;
-        const gameState = initializeGame(room.players);
+        const gameState = initializeGame(room.players, room.deckConfig);
         await startGame(gameState);
     };
 
@@ -120,6 +121,7 @@ export default function OnlineLobbyScreen() {
             onStartGame={handleStartGame}
             onUpdatePlayerName={updatePlayerName}
             onUpdatePlayerColor={updatePlayerColor}
+            onUpdateDeckConfig={updateDeckConfig}
             onLeave={handleLeave}
         />
     );

@@ -2,6 +2,12 @@
 // 型定義: 変態は踊る
 // ====================================
 
+// デッキ構成設定
+export interface DeckConfig {
+    inventory: Record<CardType, number>; // 総カード在庫設定
+    mandatory: Record<number, Partial<Record<CardType, number>>>; // 人数別必須カード設定
+}
+
 // カード種別
 export type CardType =
     | 'first_discoverer'  // 変態目撃者（第一発見者）
@@ -188,7 +194,7 @@ export interface RoomData {
     id: string;
     hostId: string;
     players: Player[];
-    deckConfig: Record<CardType, number>;
+    deckConfig: DeckConfig;
     status: RoomStatus;
     gameState: GameState | null;
     debugMode: boolean;
@@ -218,8 +224,3 @@ export interface GameResult {
     }[];
 }
 
-// デッキ構成設定
-export interface DeckConfig {
-    inventory: Record<CardType, number>; // 総カード在庫設定
-    mandatory: Record<number, Partial<Record<CardType, number>>>; // 人数別必須カード設定
-}
