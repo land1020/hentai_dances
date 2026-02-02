@@ -90,6 +90,8 @@ export default function LobbyScreen({
         ? (onlineRoomState?.hostId === resolvedUserId)
         : true;
 
+    console.log('[LobbyScreen] isHost:', isHost, 'isOnlineMode:', isOnlineMode, 'hostId:', onlineRoomState?.hostId, 'resolvedUserId:', resolvedUserId);
+
     // 初期化
     // 初期化（ローカルモードのみ）
     useEffect(() => {
