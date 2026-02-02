@@ -220,9 +220,6 @@ export interface GameResult {
 
 // デッキ構成設定
 export interface DeckConfig {
-    [key: string]: {
-        min: number;  // 最小枚数
-        max: number;  // 最大枚数
-        fixed?: boolean; // 固定枚数かどうか
-    };
+    inventory: Record<CardType, number>; // 総カード在庫設定
+    mandatory: Record<number, Partial<Record<CardType, number>>>; // 人数別必須カード設定
 }

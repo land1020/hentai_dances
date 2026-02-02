@@ -31,9 +31,12 @@ import {
     type LocalRoomState
 } from '../store/gameStore';
 import { CARD_DEFINITIONS } from '../data/cards';
-import { CARD_INVENTORY } from '../utils/deckFactory';
 import { initializeGame } from '../engine/GameEngine';
 import type { OnlineRoomState } from '../services/roomService';
+import { updateDeckConfig } from '../store/gameStore';
+import { DEFAULT_INVENTORY, DEFAULT_MANDATORY_CARDS } from '../utils/deckFactory';
+import DeckConfigModal from '../components/DeckConfigModal';
+import type { DeckConfig } from '../types';
 
 interface LobbyScreenProps {
     isOnlineMode?: boolean;
@@ -47,46 +50,8 @@ interface LobbyScreenProps {
     onLeave?: () => void;
 }
 
-// 参加人数ごとの必須カード構成
-const MANDATORY_CARDS_CONFIG: Record<number, Partial<Record<CardType, number>>> = {
-    3: {
-        first_discoverer: 1,
-        culprit: 1,
-        detective: 1,
-        alibi: 2,
-    },
-    4: {
-        first_discoverer: 1,
-        culprit: 1,
-        detective: 1,
-        alibi: 2,
-        plot: 1,
-    },
-    5: {
-        first_discoverer: 1,
-        culprit: 1,
-        detective: 1,
-        alibi: 2,
-        plot: 1,
-    },
-    6: {
-        first_discoverer: 1,
-        culprit: 1,
-        detective: 2,
-        alibi: 2,
-        plot: 2,
-    },
-    7: {
-        first_discoverer: 1,
-        culprit: 1,
-        detective: 2,
-        alibi: 3,
-        plot: 2,
-    },
-    8: {
-        // 8人は全カード使用
-    },
-};
+// 参加人数ごとの必須カード構成 (Deprecated: Now utilizing DEFAULT_MANDATORY_CARDS from deckFactory and roomState)
+// const MANDATORY_CARDS_CONFIG... removed
 
 export default function LobbyScreen({
     isOnlineMode = false,
@@ -112,6 +77,7 @@ export default function LobbyScreen({
     const isLoading = isOnlineMode ? !onlineRoomState : isInitializing;
     const [editingNpcId, setEditingNpcId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
+    const [showDeckConfigModal, setShowDeckConfigModal] = useState(false);
 
     // 初期化
     // 初期化（ローカルモードのみ）
@@ -167,7 +133,13 @@ export default function LobbyScreen({
             if (onStartGame) await onStartGame();
         } else if (localRoomState) {
             // ゲームを初期化（カードを配布）
-            const gameState = initializeGame(localRoomState.players);
+            // 古いデータでdeckConfigがない場合のフォールバック
+            const deckConfig: DeckConfig = localRoomState.deckConfig || {
+                inventory: DEFAULT_INVENTORY,
+                mandatory: DEFAULT_MANDATORY_CARDS
+            };
+
+            const gameState = initializeGame(localRoomState.players, deckConfig);
 
             const newState: LocalRoomState = {
                 ...localRoomState,
@@ -224,10 +196,17 @@ export default function LobbyScreen({
         const playerCount = roomState.players.length;
         const targetTotal = playerCount * 4;
 
-        // 8人の場合は全カード使用
+        // デッキ設定を取得（フォールバック付き）
+        const deckConfig: DeckConfig = (roomState as any).deckConfig || {
+            inventory: DEFAULT_INVENTORY,
+            mandatory: DEFAULT_MANDATORY_CARDS
+        };
+        const inventory = deckConfig.inventory;
+
+        // 8人の場合は全カード使用（在庫にあるものすべて）
         if (playerCount === 8) {
             const allCards: { type: CardType; count: number; isMandatory: boolean }[] = [];
-            for (const [type, count] of Object.entries(CARD_INVENTORY)) {
+            for (const [type, count] of Object.entries(inventory)) {
                 if (count > 0) {
                     allCards.push({
                         type: type as CardType,
@@ -240,19 +219,20 @@ export default function LobbyScreen({
                 playerCount,
                 targetTotal,
                 mandatoryCards: allCards,
-                mandatoryTotal: 32,
+                mandatoryTotal: 32, // ここは在庫総数と一致すべき
                 randomCount: 0,
                 isFullDeck: true,
+                config: deckConfig
             };
         }
 
         // 必須カードを取得
-        const mandatoryConfig = MANDATORY_CARDS_CONFIG[playerCount] || {};
+        const mandatoryConfig = deckConfig.mandatory[playerCount] || {};
         const mandatoryCards: { type: CardType; count: number; isMandatory: boolean }[] = [];
         let mandatoryTotal = 0;
 
         for (const [type, count] of Object.entries(mandatoryConfig)) {
-            if (count > 0) {
+            if (count && count > 0) {
                 mandatoryCards.push({
                     type: type as CardType,
                     count,
@@ -278,9 +258,10 @@ export default function LobbyScreen({
     const randomPoolCards = useMemo(() => {
         if (!deckInfo || deckInfo.isFullDeck) return [];
 
+        const inventory = deckInfo.config?.inventory || DEFAULT_INVENTORY;
         const pool: { type: CardType; name: string; maxCount: number }[] = [];
 
-        for (const [type, inventoryCount] of Object.entries(CARD_INVENTORY)) {
+        for (const [type, inventoryCount] of Object.entries(inventory)) {
             const cardType = type as CardType;
             const mandatoryUsed = deckInfo.mandatoryCards.find(c => c.type === cardType)?.count || 0;
             const remaining = inventoryCount - mandatoryUsed;
@@ -307,6 +288,26 @@ export default function LobbyScreen({
 
     const canStart = roomState.players.length >= 3 && roomState.players.length <= 8;
     const npcCount = roomState.players.filter((p: Player) => p.isNpc).length;
+
+    // デッキバリデーション
+    const deckValidation = useMemo(() => {
+        const config: DeckConfig = (roomState as any).deckConfig || {
+            inventory: DEFAULT_INVENTORY,
+            mandatory: DEFAULT_MANDATORY_CARDS
+        };
+        const currentTotal = Object.values(config.inventory).reduce((sum, n) => sum + n, 0);
+
+        // 必須カード過多チェック
+        const playerCount = roomState.players.length;
+        if (playerCount >= 3 && playerCount <= 8) {
+            // check mandatory logic similar to deckFactory
+        }
+
+        return {
+            isValid: currentTotal === 32,
+            message: currentTotal !== 32 ? `カード合計が32枚ではありません（現在${currentTotal}枚）` : ''
+        };
+    }, [roomState]);
 
     return (
         <div className="min-h-screen p-4">
@@ -512,8 +513,18 @@ export default function LobbyScreen({
                             <Settings className="w-5 h-5 text-purple-400" />
                             <h2 className="text-lg font-bold">デッキ構成</h2>
                         </div>
-                        <div className="text-xs text-gray-400">
-                            自動生成
+                        <div className="flex items-center gap-2">
+                            {!isOnlineMode && (
+                                <button
+                                    onClick={() => setShowDeckConfigModal(true)}
+                                    className="px-3 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded text-sm transition-colors border border-purple-500/30"
+                                >
+                                    デッキ調整
+                                </button>
+                            )}
+                            <div className="text-xs text-gray-400">
+                                自動生成
+                            </div>
                         </div>
                     </div>
 
@@ -604,11 +615,21 @@ export default function LobbyScreen({
                     </div>
                 )}
 
+                {/* デッキエラー警告 */}
+                {!deckValidation.isValid && (
+                    <div className="card-base p-4 mb-4 bg-red-500/10 border border-red-500/30">
+                        <div className="flex items-center gap-2 text-red-400">
+                            <AlertCircle className="w-5 h-5" />
+                            <span>{deckValidation.message}</span>
+                        </div>
+                    </div>
+                )}
+
                 {/* アクションボタン */}
                 <div className="space-y-3">
                     <button
                         onClick={handleStartGame}
-                        disabled={!canStart}
+                        disabled={!canStart || !deckValidation.isValid}
                         className="btn-primary w-full text-lg py-4 flex items-center justify-center gap-2"
                     >
                         <Play className="w-5 h-5" />
@@ -623,6 +644,22 @@ export default function LobbyScreen({
                     </button>
                 </div>
             </div>
+            {/* デッキ設定モーダル */}
+            {localRoomState && (
+                <DeckConfigModal
+                    isOpen={showDeckConfigModal}
+                    onClose={() => setShowDeckConfigModal(false)}
+                    onSave={(newConfig) => {
+                        const newState = updateDeckConfig(localRoomState, newConfig);
+                        setLocalRoomState(newState);
+                        setShowDeckConfigModal(false);
+                    }}
+                    initialConfig={localRoomState.deckConfig || {
+                        inventory: DEFAULT_INVENTORY,
+                        mandatory: DEFAULT_MANDATORY_CARDS
+                    }}
+                />
+            )}
         </div>
     );
 }

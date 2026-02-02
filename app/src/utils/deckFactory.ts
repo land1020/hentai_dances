@@ -13,7 +13,13 @@ import { CARD_DEFINITIONS } from '../data/cards';
  * 全32枚のカード在庫（Inventory）
  * ゲームに含まれる全カードの総枚数を定義
  */
-export const CARD_INVENTORY: Record<CardType, number> = {
+import type { DeckConfig } from '../types';
+
+/**
+ * 全32枚のカード在庫（Inventory）
+ * ゲームに含まれる全カードの総枚数を定義
+ */
+export const DEFAULT_INVENTORY: Record<CardType, number> = {
     first_discoverer: 1,  // 変態目撃者
     culprit: 1,           // 変態
     detective: 4,         // 警察
@@ -21,21 +27,24 @@ export const CARD_INVENTORY: Record<CardType, number> = {
     plot: 2,              // 異常性癖者
     rumor: 3,             // うわさ
     information: 3,       // 情報操作
-    dog: 4,               // 正常者
-    boy: 4,               // 少年
+    dog: 1,               // 正常者（通報）
+    boy: 1,               // 少年
     witness: 3,           // 目撃者
-    trade: 2,             // 取り引き
-    common: 0,            // 一般人（在庫なし - 計32枚）
+    trade: 5,             // 取り引き
+    common: 3,            // 一般人（調整用 - 計32枚）
 };
 
+// 互換性のために残す（非推奨）
+export const CARD_INVENTORY = DEFAULT_INVENTORY;
+
 // 在庫の総枚数を計算（デバッグ用）
-const TOTAL_INVENTORY = Object.values(CARD_INVENTORY).reduce((sum, count) => sum + count, 0);
+const TOTAL_INVENTORY = Object.values(DEFAULT_INVENTORY).reduce((sum, count) => sum + count, 0);
 console.assert(TOTAL_INVENTORY === 32, `在庫総数が32枚ではありません: ${TOTAL_INVENTORY}枚`);
 
 /**
  * 参加人数ごとの必須カード構成
  */
-const MANDATORY_CARDS: Record<number, Partial<Record<CardType, number>>> = {
+export const DEFAULT_MANDATORY_CARDS: Record<number, Partial<Record<CardType, number>>> = {
     3: {
         first_discoverer: 1,
         culprit: 1,
@@ -72,7 +81,6 @@ const MANDATORY_CARDS: Record<number, Partial<Record<CardType, number>>> = {
     },
     8: {
         // 8人は全カードを使用するため、必須カード定義は不要
-        // （ステップA・Bをスキップして在庫全てを使用）
     },
 };
 
@@ -129,16 +137,21 @@ function createCards(type: CardType, count: number): Card[] {
 /**
  * デッキを生成する
  * @param playerCount プレイ人数（3〜8人）
+ * @param config デッキ構成（省略時はデフォルト）
  * @returns シャッフルされたカード配列
  * @throws Error プレイ人数が範囲外、または在庫不足の場合
  */
-export function generateDeck(playerCount: number): Card[] {
+export function generateDeck(playerCount: number, config?: DeckConfig): Card[] {
     // ====================================
     // エラーハンドリング: 人数バリデーション
     // ====================================
     if (playerCount < 3 || playerCount > 8) {
         throw new Error(`プレイ人数は3〜8人です。現在: ${playerCount}人`);
     }
+
+    // 設定を使用（なければデフォルト）
+    const inventory = config?.inventory || DEFAULT_INVENTORY;
+    const mandatoryMap = config?.mandatory || DEFAULT_MANDATORY_CARDS;
 
     // カードIDカウンターをリセット
     resetCardIdCounter();
@@ -151,7 +164,7 @@ export function generateDeck(playerCount: number): Card[] {
     // ====================================
     if (playerCount === 8) {
         const deck: Card[] = [];
-        for (const [cardType, count] of Object.entries(CARD_INVENTORY)) {
+        for (const [cardType, count] of Object.entries(inventory)) {
             if (count > 0) {
                 deck.push(...createCards(cardType as CardType, count));
             }
@@ -171,7 +184,7 @@ export function generateDeck(playerCount: number): Card[] {
     // ====================================
     // ステップA: 必須カードの確保 (Mandatory Cards)
     // ====================================
-    const mandatoryConfig = MANDATORY_CARDS[playerCount];
+    const mandatoryConfig = mandatoryMap[playerCount];
     if (!mandatoryConfig) {
         throw new Error(`${playerCount}人用の必須カード構成が定義されていません。`);
     }
@@ -180,23 +193,25 @@ export function generateDeck(playerCount: number): Card[] {
     const usedInventory: Record<CardType, number> = {} as Record<CardType, number>;
 
     // 在庫を初期化
-    for (const cardType of Object.keys(CARD_INVENTORY) as CardType[]) {
+    for (const cardType of Object.keys(inventory) as CardType[]) {
         usedInventory[cardType] = 0;
     }
 
     // 必須カードを生成
     for (const [cardType, count] of Object.entries(mandatoryConfig)) {
         const type = cardType as CardType;
-        const inventoryCount = CARD_INVENTORY[type];
+        const inventoryCount = inventory[type] || 0;
 
-        if (count > inventoryCount) {
+        if (count && count > inventoryCount) {
             throw new Error(
                 `必須カード「${CARD_DEFINITIONS[type].name}」の枚数(${count})が在庫(${inventoryCount})を超えています。`
             );
         }
 
-        mandatoryCards.push(...createCards(type, count));
-        usedInventory[type] = count;
+        if (count) {
+            mandatoryCards.push(...createCards(type, count));
+            usedInventory[type] = count;
+        }
     }
 
     // ====================================
@@ -213,7 +228,7 @@ export function generateDeck(playerCount: number): Card[] {
 
     // 候補リストを作成（在庫から使用済み分を差し引く）
     const remainingPool: Card[] = [];
-    for (const [cardType, inventoryCount] of Object.entries(CARD_INVENTORY)) {
+    for (const [cardType, inventoryCount] of Object.entries(inventory)) {
         const type = cardType as CardType;
         const used = usedInventory[type] || 0;
         const remaining = inventoryCount - used;

@@ -2,7 +2,7 @@
 // ゲームエンジン: 変態は踊る
 // ====================================
 
-import type { GameState, Player, Card, WinnerTeam, VictoryType, VictoryInfo, PlayerResult, ArrestAnimationInfo } from '../types';
+import type { GameState, Player, Card, WinnerTeam, VictoryType, VictoryInfo, PlayerResult, ArrestAnimationInfo, DeckConfig } from '../types';
 import { GamePhase } from '../types';
 import { generateDeck, dealCards, findFirstDiscovererIndex } from '../utils/deckFactory';
 import { getRandomDangerWord } from '../data/wordList';
@@ -12,7 +12,8 @@ import { calculateHentaiLevel, generateDisplayName } from '../hooks/useHentaiSys
  * ゲームを初期化する
  */
 export function initializeGame(
-    players: Player[]
+    players: Player[],
+    deckConfig?: DeckConfig
 ): GameState {
     const playerCount = players.length;
 
@@ -25,7 +26,7 @@ export function initializeGame(
     console.log('[Init] Player order shuffled:', shuffledPlayers.map(p => p.name).join(' -> '));
 
     // デッキを生成してシャッフル（参加人数に応じて自動生成）
-    const deck = generateDeck(playerCount);
+    const deck = generateDeck(playerCount, deckConfig);
 
     // カードを配布
     const hands = dealCards(deck, playerCount);

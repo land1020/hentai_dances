@@ -2,10 +2,11 @@
 // ゲーム状態管理ストア（ローカルモード）
 // ====================================
 
-import type { Player, GameState, Card } from '../types';
+import type { Player, GameState, Card, DeckConfig } from '../types';
 import { GamePhase } from '../types';
+import { DEFAULT_INVENTORY, DEFAULT_MANDATORY_CARDS } from '../utils/deckFactory';
 
-// ルーム状態の型（deckConfigは削除 - 自動生成されるため）
+// ルーム状態の型
 export interface LocalRoomState {
     roomId: string;
     hostId: string;
@@ -13,6 +14,7 @@ export interface LocalRoomState {
     status: 'WAITING' | 'PLAYING' | 'FINISHED';
     gameState: GameState | null;
     debugMode: boolean;
+    deckConfig: DeckConfig;
 }
 
 // ローカルストレージキー
@@ -56,6 +58,10 @@ export function createInitialRoomState(roomId: string, hostId: string, hostName:
         status: 'WAITING',
         gameState: null,
         debugMode: true,
+        deckConfig: {
+            inventory: { ...DEFAULT_INVENTORY },
+            mandatory: JSON.parse(JSON.stringify(DEFAULT_MANDATORY_CARDS)), // Deep copy recommendation
+        },
     };
 }
 
@@ -152,6 +158,16 @@ export function updatePlayerName(state: LocalRoomState, playerId: string, name: 
         players: state.players.map(p =>
             p.id === playerId ? { ...p, name } : p
         ),
+    };
+    saveRoomState(newState);
+    return newState;
+}
+
+// デッキ構成を更新
+export function updateDeckConfig(state: LocalRoomState, config: DeckConfig): LocalRoomState {
+    const newState = {
+        ...state,
+        deckConfig: config,
     };
     saveRoomState(newState);
     return newState;
