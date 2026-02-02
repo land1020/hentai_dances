@@ -116,6 +116,7 @@ export default function OnlineLobbyScreen() {
             isOnlineMode={true}
             onlineRoomId={roomId}
             onlineRoomState={room}
+            currentUserId={userId}
             onAddNpc={handleAddNpc}
             onRemoveNpc={handleRemoveNpc}
             onStartGame={handleStartGame}

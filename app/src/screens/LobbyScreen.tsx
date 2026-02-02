@@ -59,6 +59,7 @@ export default function LobbyScreen({
     isOnlineMode = false,
     onlineRoomId,
     onlineRoomState,
+    currentUserId,
     onAddNpc,
     onRemoveNpc,
     onStartGame,
@@ -73,7 +74,9 @@ export default function LobbyScreen({
     const navigate = useNavigate();
     const [localRoomState, setLocalRoomState] = useState<LocalRoomState | null>(null);
     const roomState = isOnlineMode ? (onlineRoomState as any) : localRoomState;
-    const currentUserId = localStorage.getItem('hentai_user_id');
+
+    // propsでcurrentUserIdが渡されていればそれを使用、なければlocalStorageから取得
+    const resolvedUserId = currentUserId || localStorage.getItem('hentai_user_id');
 
     const [isInitializing, setIsInitializing] = useState(true);
 
@@ -84,7 +87,7 @@ export default function LobbyScreen({
 
     // ホスト判定
     const isHost = isOnlineMode
-        ? (onlineRoomState?.hostId === currentUserId)
+        ? (onlineRoomState?.hostId === resolvedUserId)
         : true;
 
     // 初期化
@@ -418,7 +421,7 @@ export default function LobbyScreen({
                     </div>
 
                     {/* NPC管理（ホストのみ、またはローカルモード） */}
-                    {(!isOnlineMode || (roomState.hostId === currentUserId)) && (
+                    {(!isOnlineMode || (roomState.hostId === resolvedUserId)) && (
                         <div className="mt-4 pt-4 border-t border-white/10">
                             <div className="flex items-center justify-between">
                                 <span className="text-sm text-gray-400">
