@@ -271,11 +271,19 @@ export default function LobbyScreen({
     const randomPoolCards = useMemo(() => {
         if (!deckInfo || deckInfo.isFullDeck) return [];
 
-        const inventory = deckInfo.config?.inventory || DEFAULT_INVENTORY;
+        // DEFAULT_INVENTORYをベースに、config.inventoryがあればマージ
+        const inventory = { ...DEFAULT_INVENTORY, ...(deckInfo.config?.inventory || {}) };
         const pool: { type: CardType; name: string; maxCount: number }[] = [];
+
+        console.log('[LobbyScreen] randomPoolCards inventory:', inventory);
 
         for (const [type, inventoryCount] of Object.entries(inventory)) {
             const cardType = type as CardType;
+            // CARD_DEFINITIONSに存在しないカードタイプはスキップ
+            if (!CARD_DEFINITIONS[cardType]) {
+                console.warn(`[LobbyScreen] Unknown card type: ${cardType}`);
+                continue;
+            }
             const mandatoryUsed = deckInfo.mandatoryCards.find(c => c.type === cardType)?.count || 0;
             const remaining = inventoryCount - mandatoryUsed;
 
