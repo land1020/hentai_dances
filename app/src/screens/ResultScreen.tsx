@@ -104,8 +104,10 @@ export default function ResultScreen() {
     const handlePlayAgain = async () => {
         if (roomState) {
             const updatedPlayers = getNextPlayers();
-            // ゲーム開始処理
-            const newGameState = initializeGame(updatedPlayers);
+            // deckConfigを取得（オンラインはroomから、ローカルはroomStateから）
+            const deckConfig = isOnline && room ? room.deckConfig : roomState.deckConfig;
+            // ゲーム開始処理（deckConfigを渡す）
+            const newGameState = initializeGame(updatedPlayers, deckConfig);
 
             if (isOnline && roomId) {
                 // オンライン: 全員の画面を切り替えるためにFirestoreを更新

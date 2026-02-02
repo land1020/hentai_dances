@@ -90,7 +90,6 @@ export default function LobbyScreen({
         ? (onlineRoomState?.hostId === resolvedUserId)
         : true;
 
-    console.log('[LobbyScreen] isHost:', isHost, 'isOnlineMode:', isOnlineMode, 'hostId:', onlineRoomState?.hostId, 'resolvedUserId:', resolvedUserId);
 
     // 初期化
     // 初期化（ローカルモードのみ）
@@ -275,7 +274,6 @@ export default function LobbyScreen({
         const inventory = { ...DEFAULT_INVENTORY, ...(deckInfo.config?.inventory || {}) };
         const pool: { type: CardType; name: string; maxCount: number }[] = [];
 
-        console.log('[LobbyScreen] randomPoolCards inventory:', inventory);
 
         for (const [type, inventoryCount] of Object.entries(inventory)) {
             const cardType = type as CardType;
